@@ -20,9 +20,7 @@ export type NoteEvent = {
   samplerId: SamplerId
   time: number
   duration: number
-  nominalDuration: number
   measureStartTime: number
-  noteType: string | null
   isGrace: boolean
   hasTimeModification: boolean
   note: string
@@ -950,9 +948,6 @@ export const parseMusicXmlForEvents = async (
         const notePlaybackMetadata = {
           staff,
           measureStartTime: startTicks,
-          nominalDuration: duration,
-          noteType:
-            note.querySelector(':scope > type')?.textContent?.trim() || null,
           isGrace: note.querySelector(':scope > grace') !== null,
           hasTimeModification:
             note.querySelector(':scope > time-modification') !== null,

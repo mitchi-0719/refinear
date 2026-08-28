@@ -531,11 +531,11 @@ const createSwingDirection = (
   divisions: number
 ): Element => {
   const direction = doc.createElement('direction')
+  direction.setAttribute('print-object', 'no')
   const directionType = doc.createElement('direction-type')
-  const words = doc.createElement('words')
-  words.setAttribute('print-object', 'no')
-  words.textContent = marker.unit ? 'Swing playback' : 'Straight playback'
-  directionType.append(words)
+  const otherDirection = doc.createElement('other-direction')
+  otherDirection.setAttribute('print-object', 'no')
+  directionType.append(otherDirection)
   direction.append(directionType)
 
   const offset = doc.createElement('offset')
