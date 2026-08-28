@@ -18,7 +18,7 @@ documents: []
 ## URL集
 - **Github**: [https://github.com/mitchi-0719/refinear](https://github.com/mitchi-0719/refinear)
 - **デプロイ**: [https://vercel.com/mitchi0719s-projects/refinear](https://vercel.com/mitchi0719s-projects/refinear)
-- **公開URL**: [https://refinear.vercel.app/](https://refinear.vercel.app/)
+- **公開URL**: [https://refinear.39panda.dev/](https://refinear.39panda.dev/)
 - **Notebook**: [https://gemini.google.com/notebook/e6f3fa88-503b-4e62-8660-801c1232bd4e](https://gemini.google.com/notebook/e6f3fa88-503b-4e62-8660-801c1232bd4e)
 ---
 ## 1. プロジェクト概要

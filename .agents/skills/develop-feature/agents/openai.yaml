@@ -1,0 +1,4 @@
+interface:
+  display_name: "Develop Feature"
+  short_description: "Issue確認から変更・検証・PR作成までを一貫して進行"
+  default_prompt: "Use $develop-feature to take this requested change from Issue discovery through an approved implementation plan, development, verification, and pull request creation."

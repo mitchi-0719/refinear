@@ -1,0 +1,44 @@
+name: Publish release
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - closed
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: publish
+    if: >-
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.head.ref == 'develop'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout merged commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Create tag and GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          RELEASE_MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          RELEASE_PR_MERGED: ${{ github.event.pull_request.merged }}
+          RELEASE_PR_TITLE: ${{ github.event.pull_request.title }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+        run: node scripts/releaseVersion.mjs

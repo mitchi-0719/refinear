@@ -127,3 +127,25 @@ npm run preview:cloudflare
 # 本番デプロイ
 npm run deploy:cloudflare
 ```
+
+Pull RequestのCI、Cloudflare Workers Builds、リリースPR、Gitタグ、GitHub
+Release、ロールバックを含む運用手順は
+[`docs/RELEASE.md`](./docs/RELEASE.md)を参照してください。
+
+## ライセンス
+
+Refinearのソースコードと同梱するデモ楽譜は、GNU General Public License
+version 3 only（GPL-3.0-only）の条件で公開しています。ライセンス全文は
+[`LICENSE`](./LICENSE)を参照してください。
+
+音源、アイコン、依存ソフトウェアにはそれぞれのライセンスが適用されます。
+詳細は[`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md)と、公開アプリの
+「ライセンス・クレジット」を参照してください。
+
+## 公開情報
+
+- 公開URL: <https://refinear.39panda.dev/>
+- プライバシー: <https://refinear.39panda.dev/privacy>
+- 利用上の注意: <https://refinear.39panda.dev/terms>
+- ライセンス・クレジット: <https://refinear.39panda.dev/licenses>
+- 問い合わせ: <refinear.contact@39panda.dev>

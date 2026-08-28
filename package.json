@@ -2,6 +2,7 @@
   "name": "refinear",
   "version": "0.0.0",
   "private": true,
+  "license": "GPL-3.0-only",
   "type": "module",
   "scripts": {
     "build": "tsc -b && vite build",
@@ -11,11 +12,14 @@
     "fetch_plan": "sh scripts/fetch_plan.sh",
     "format": "prettier --write .",
     "format:check": "prettier . --check",
+    "licenses:generate": "node scripts/generateThirdPartyLicenses.mjs",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "prepare": "husky",
     "preview": "vite preview",
-    "preview:cloudflare": "npm run build && wrangler dev"
+    "preview:cloudflare": "npm run build && wrangler dev",
+    "test:release": "node --test scripts/releaseVersion.test.mjs",
+    "test:swing": "node --test scripts/swingPlayback.test.mjs"
   },
   "dependencies": {
     "jszip": "^3.10.1",

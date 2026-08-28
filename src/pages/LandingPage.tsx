@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 
+import { Footer } from '../components/layout/Footer'
 import {
   ActionLink,
   FeatureItem,
@@ -164,5 +165,6 @@ export const LandingPage = () => (
         <small>対応形式 .mscz / インストール不要</small>
       </section>
     </main>
+    <Footer />
   </div>
 )

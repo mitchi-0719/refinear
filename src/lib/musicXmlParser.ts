@@ -3,6 +3,7 @@ import {
   MIDI_UNPITCHED_TO_KEY,
 } from '../constants/drum'
 import { logger } from './logger'
+import type { SwingChange, SwingUnit } from './swingPlayback'
 
 export type SamplerId = 'piano' | 'drum' | 'clap'
 
@@ -13,11 +14,15 @@ export type TempoChange = {
 
 export type NoteEvent = {
   partId: string
+  staff: string
   partName: string | null
   instrumentName: string | null
   samplerId: SamplerId
   time: number
   duration: number
+  measureStartTime: number
+  isGrace: boolean
+  hasTimeModification: boolean
   note: string
   playbackKey: string
   midi: number
@@ -289,6 +294,112 @@ const getTempoChanges = (
   if (!changes.has(0)) changes.set(0, getTempo(doc))
   return Array.from(changes, ([time, bpm]) => ({ time, bpm })).sort(
     (left, right) => left.time - right.time
+  )
+}
+
+const getSwingChanges = (
+  doc: Document,
+  measureStartTicks: number[],
+  fallbackDivisions: number
+): SwingChange[] => {
+  const changes: SwingChange[] = []
+
+  doc.querySelectorAll('score-partwise > part').forEach((part) => {
+    const partId = part.getAttribute('id') || 'P1'
+    let currentDivisions = fallbackDivisions
+
+    part.querySelectorAll(':scope > measure').forEach((measure, index) => {
+      currentDivisions = getMeasureDivisions(measure, currentDivisions)
+      const measureStart = measureStartTicks[index] ?? 0
+      let cursor = measureStart
+
+      Array.from(measure.children).forEach((child) => {
+        const tag = child.tagName.toLowerCase()
+        if (tag === 'backup' || tag === 'forward') {
+          const rawDuration = Number(
+            child.querySelector('duration')?.textContent || '0'
+          )
+          const ticks = Number.isFinite(rawDuration)
+            ? Math.round((rawDuration / currentDivisions) * TICKS_PER_QUARTER)
+            : 0
+          cursor = Math.max(
+            measureStart,
+            cursor + (tag === 'backup' ? -ticks : ticks)
+          )
+          return
+        }
+
+        if (tag === 'note') {
+          if (!child.querySelector('chord')) {
+            cursor += getDurationTicks(child, currentDivisions)
+          }
+          return
+        }
+
+        if (tag !== 'direction') return
+        const swing = child.querySelector(':scope > sound > swing')
+        if (!swing) return
+
+        const soundOffset =
+          swing.parentElement?.querySelector(':scope > offset')?.textContent
+        const directionOffset =
+          child.querySelector(':scope > offset')?.textContent
+        const rawOffset = Number(soundOffset ?? directionOffset ?? '0')
+        const offsetTicks = Number.isFinite(rawOffset)
+          ? Math.round((rawOffset / currentDivisions) * TICKS_PER_QUARTER)
+          : 0
+        const time = Math.max(0, cursor + offsetTicks)
+        const staff =
+          child.querySelector(':scope > staff')?.textContent?.trim() || null
+
+        if (swing.querySelector(':scope > straight')) {
+          changes.push({ partId, staff, time, unit: null, ratio: 50 })
+          return
+        }
+
+        const first = Number(
+          swing.querySelector(':scope > first')?.textContent || ''
+        )
+        const second = Number(
+          swing.querySelector(':scope > second')?.textContent || ''
+        )
+        const rawUnit =
+          swing.querySelector(':scope > swing-type')?.textContent?.trim() ||
+          'eighth'
+        const unit: SwingUnit | null =
+          rawUnit === 'eighth' || rawUnit === '16th' ? rawUnit : null
+        if (
+          !unit ||
+          !Number.isFinite(first) ||
+          !Number.isFinite(second) ||
+          first <= 0 ||
+          second <= 0
+        ) {
+          logger.warn('MusicXMLのSwing設定を解釈できませんでした', {
+            partId,
+            first,
+            second,
+            unit: rawUnit,
+          })
+          return
+        }
+
+        changes.push({
+          partId,
+          staff,
+          time,
+          unit,
+          ratio: (first / (first + second)) * 100,
+        })
+      })
+    })
+  })
+
+  return changes.sort(
+    (left, right) =>
+      left.time - right.time ||
+      left.partId.localeCompare(right.partId) ||
+      Number(left.staff !== null) - Number(right.staff !== null)
   )
 }
 
@@ -658,13 +769,17 @@ const parseNoteData = (
 
 export const parseMusicXmlForEvents = async (
   musicXml: string
-): Promise<{ events: NoteEvent[]; tempoChanges: TempoChange[] }> => {
+): Promise<{
+  events: NoteEvent[]
+  tempoChanges: TempoChange[]
+  swingChanges: SwingChange[]
+}> => {
   const parser = new DOMParser()
   const doc = parser.parseFromString(musicXml, 'application/xml')
 
   if (doc.querySelector('parsererror')) {
     logger.warn('MusicXML の解析に失敗しました')
-    return { events: [], tempoChanges: [] }
+    return { events: [], tempoChanges: [], swingChanges: [] }
   }
 
   const events: NoteEvent[] = []
@@ -830,6 +945,13 @@ export const parseMusicXmlForEvents = async (
         const baseTime = Math.max(currentTime, startTicks)
         const startTime = isChord ? baseTime : measureCursor
         const staff = note.querySelector(':scope > staff')?.textContent || '1'
+        const notePlaybackMetadata = {
+          staff,
+          measureStartTime: startTicks,
+          isGrace: note.querySelector(':scope > grace') !== null,
+          hasTimeModification:
+            note.querySelector(':scope > time-modification') !== null,
+        }
         const { velocity, dynamic } = getDynamicAtTime(
           dynamicChangesByStaff.get(staff),
           startTime
@@ -841,6 +963,7 @@ export const parseMusicXmlForEvents = async (
         if (isRest) {
           events.push({
             partId,
+            ...notePlaybackMetadata,
             partName: partMeta.partName,
             instrumentName: null,
             samplerId: 'piano',
@@ -907,6 +1030,7 @@ export const parseMusicXmlForEvents = async (
 
           events.push({
             partId: pendingTie.partId,
+            ...notePlaybackMetadata,
             partName: pendingTie.partName,
             instrumentName: pendingTie.instrumentName,
             samplerId: pendingTie.samplerId,
@@ -949,6 +1073,7 @@ export const parseMusicXmlForEvents = async (
         if (tieStart && !tieStop) {
           const event: NoteEvent = {
             partId,
+            ...notePlaybackMetadata,
             partName: partMeta.partName,
             instrumentName: parsedNote.instrumentName,
             samplerId: parsedNote.samplerId,
@@ -1003,6 +1128,7 @@ export const parseMusicXmlForEvents = async (
         if (tieStart && tieStop) {
           const event: NoteEvent = {
             partId,
+            ...notePlaybackMetadata,
             partName: partMeta.partName,
             instrumentName: parsedNote.instrumentName,
             samplerId: parsedNote.samplerId,
@@ -1056,6 +1182,7 @@ export const parseMusicXmlForEvents = async (
 
         events.push({
           partId,
+          ...notePlaybackMetadata,
           partName: partMeta.partName,
           instrumentName: parsedNote.instrumentName,
           samplerId: parsedNote.samplerId,
@@ -1104,5 +1231,6 @@ export const parseMusicXmlForEvents = async (
   return {
     events: sortedEvents,
     tempoChanges: getTempoChanges(doc, measureStartTicks, fallbackDivisions),
+    swingChanges: getSwingChanges(doc, measureStartTicks, fallbackDivisions),
   }
 }

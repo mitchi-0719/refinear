@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom'
+
 const externalLinkClass =
   'underline decoration-slate-300 underline-offset-4 hover:text-blue-600'
 
@@ -7,6 +9,21 @@ export const Footer = () => (
       <div>
         <p className="font-bold text-[#071b47]">Refinear</p>
         <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1">
+          <Link className={externalLinkClass} to="/privacy">
+            プライバシー
+          </Link>
+          <Link className={externalLinkClass} to="/terms">
+            利用上の注意
+          </Link>
+          <Link className={externalLinkClass} to="/licenses">
+            ライセンス・クレジット
+          </Link>
+          <a
+            className={externalLinkClass}
+            href="mailto:refinear.contact@39panda.dev"
+          >
+            お問い合わせ
+          </a>
           <a
             className={externalLinkClass}
             href="https://github.com/mitchi-0719/refinear"
@@ -24,7 +41,7 @@ export const Footer = () => (
             制作者のX
           </a>
         </div>
-        <p className="mt-3">© Refinear</p>
+        <p className="mt-3">© 2026 さくぱん</p>
       </div>
 
       <div>
@@ -32,51 +49,17 @@ export const Footer = () => (
           使用音源・アイコンについて / Credits
         </p>
         <ul className="mt-2 space-y-2">
-          <li>
-            ピアノ：
-            <a
-              className={externalLinkClass}
-              href="https://github.com/Tonejs/audio/tree/master/salamander"
-              target="_blank"
-              rel="noreferrer"
-            >
-              Salamander Grand Piano V3
-            </a>{' '}
-            by Alexander Holm（CC BY 3.0、一部改変）
-          </li>
-          <li>
-            ドラム：
-            <a
-              className={externalLinkClass}
-              href="https://github.com/teropa/drumkit"
-              target="_blank"
-              rel="noreferrer"
-            >
-              teropa/drumkit
-            </a>
-            （DWDS: CC BY、Stomachache / Karman Lyne: CC0、一部改変）
-          </li>
-          <li>
-            画面内のアイコン：
-            <a
-              className={externalLinkClass}
-              href="https://github.com/google/material-design-icons"
-              target="_blank"
-              rel="noreferrer"
-            >
-              Google Material Icons
-            </a>
-            （Apache License 2.0）、
-            <a
-              className={externalLinkClass}
-              href="https://icons8.com"
-              target="_blank"
-              rel="noreferrer"
-            >
-              Icons8
-            </a>
-          </li>
+          <li>ピアノ：Salamander Grand Piano V3（CC BY 3.0）</li>
+          <li>ドラム：teropa/drumkit収録音源（CC BY / CC0）</li>
+          <li>画面内のアイコン：Google Material Icons（Apache 2.0）ほか</li>
         </ul>
+        <p className="mt-3">
+          作者、変更内容、各ライセンスの詳細は
+          <Link className={externalLinkClass} to="/licenses">
+            ライセンス・クレジット
+          </Link>
+          をご覧ください。
+        </p>
       </div>
     </div>
   </footer>
