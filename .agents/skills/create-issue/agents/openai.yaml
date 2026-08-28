@@ -1,0 +1,4 @@
+interface:
+  display_name: "Create Issue"
+  short_description: "曖昧な要望を整理し、重複確認後にGitHub Issueを起票"
+  default_prompt: "Use $create-issue to turn this rough request into a template-based GitHub Issue after checking for duplicates."
