@@ -128,6 +128,10 @@ npm run preview:cloudflare
 npm run deploy:cloudflare
 ```
 
+Pull RequestのCI、Cloudflare Workers Builds、リリースPR、Gitタグ、GitHub
+Release、ロールバックを含む運用手順は
+[`docs/RELEASE.md`](./docs/RELEASE.md)を参照してください。
+
 ## ライセンス
 
 Refinearのソースコードと同梱するデモ楽譜は、GNU General Public License
