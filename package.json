@@ -18,7 +18,8 @@
     "prepare": "husky",
     "preview": "vite preview",
     "preview:cloudflare": "npm run build && wrangler dev",
-    "test:release": "node --test scripts/releaseVersion.test.mjs"
+    "test:release": "node --test scripts/releaseVersion.test.mjs",
+    "test:swing": "node --test scripts/swingPlayback.test.mjs"
   },
   "dependencies": {
     "jszip": "^3.10.1",

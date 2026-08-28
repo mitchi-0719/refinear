@@ -29,6 +29,23 @@ type MscxChordPlayback = {
   tremoloMarks: number | null
 }
 
+type MscxSwingUnit = 'eighth' | '16th' | null
+
+type MscxSwingMarker = {
+  measureIndex: number
+  offsetInWholeNotes: number
+  unit: MscxSwingUnit
+  ratio: number
+  partIndex: number | null
+  staffNumber: number | null
+}
+
+type MscxPlaybackData = {
+  harmonies: MscxHarmony[]
+  chordPlayback: MscxChordPlayback[]
+  swingMarkers: MscxSwingMarker[]
+}
+
 const HARMONY_TAG_PATTERN = /<harmony\b[\s\S]*?<\/harmony>/g
 const DIRECTION_TAG_PATTERN = /<direction\b[\s\S]*?<\/direction>/g
 const DIRECTION_TYPE_TAG_PATTERN = /<direction-type\b[\s\S]*?<\/direction-type>/
@@ -196,12 +213,7 @@ const findMscxFile = async (fileBinary: Uint8Array): Promise<string | null> => {
   }
 }
 
-const extractMscxHarmonies = (mscx: string): MscxHarmony[] => {
-  const doc = new DOMParser().parseFromString(mscx, 'application/xml')
-  if (doc.querySelector('parsererror')) {
-    return []
-  }
-
+const extractMscxHarmonies = (doc: Document): MscxHarmony[] => {
   return Array.from(doc.querySelectorAll('Harmony'))
     .map((harmony) => {
       const harmonyInfo = getDirectChild(harmony, 'harmonyInfo')
@@ -218,10 +230,7 @@ const extractMscxHarmonies = (mscx: string): MscxHarmony[] => {
     .filter((harmony): harmony is MscxHarmony => Boolean(harmony?.root))
 }
 
-const extractMscxChordPlayback = (mscx: string): MscxChordPlayback[] => {
-  const doc = new DOMParser().parseFromString(mscx, 'application/xml')
-  if (doc.querySelector('parsererror')) return []
-
+const extractMscxChordPlayback = (doc: Document): MscxChordPlayback[] => {
   return Array.from(doc.querySelectorAll('Chord')).map((chord) => {
     const subtype = getDirectChild(chord, 'TremoloSingleChord')?.querySelector(
       ':scope > subtype'
@@ -236,6 +245,189 @@ const extractMscxChordPlayback = (mscx: string): MscxChordPlayback[] => {
           : null,
     }
   })
+}
+
+const DURATION_IN_WHOLE_NOTES: Record<string, number> = {
+  longa: 4,
+  breve: 2,
+  whole: 1,
+  half: 1 / 2,
+  quarter: 1 / 4,
+  eighth: 1 / 8,
+  '16th': 1 / 16,
+  '32nd': 1 / 32,
+  '64th': 1 / 64,
+  '128th': 1 / 128,
+  '256th': 1 / 256,
+  '512th': 1 / 512,
+  '1024th': 1 / 1024,
+}
+
+const parseFraction = (value: string): number | null => {
+  const match = value.trim().match(/^(-?\d+)\/(\d+)$/)
+  if (!match) return null
+
+  const numerator = Number(match[1])
+  const denominator = Number(match[2])
+  if (!Number.isFinite(numerator) || denominator <= 0) return null
+  return numerator / denominator
+}
+
+const getMscxDuration = (element: Element, tupletRatio: number): number => {
+  const explicitDuration = parseFraction(
+    getDirectChildText(element, 'duration')
+  )
+  if (explicitDuration !== null) return explicitDuration
+
+  const durationType = getDirectChildText(element, 'durationType')
+  const baseDuration = DURATION_IN_WHOLE_NOTES[durationType] ?? 0
+  const dots = Number(getDirectChildText(element, 'dots') || '0')
+  let dottedMultiplier = 1
+  for (let index = 1; index <= dots; index += 1) {
+    dottedMultiplier += 1 / 2 ** index
+  }
+
+  return baseDuration * dottedMultiplier * tupletRatio
+}
+
+const normalizeMscxSwingUnit = (value: string): MscxSwingUnit | undefined => {
+  const normalized = value.trim().toLowerCase()
+  if (!normalized) return null
+  if (normalized === 'eighth' || normalized === '8th') return 'eighth'
+  if (normalized === '16th' || normalized === 'sixteenth') return '16th'
+  return undefined
+}
+
+const extractMscxSwingMarkers = (doc: Document): MscxSwingMarker[] => {
+  const partByStaffId = new Map<
+    string,
+    { partIndex: number; staffNumber: number }
+  >()
+
+  Array.from(doc.querySelectorAll('Score > Part')).forEach(
+    (part, partIndex) => {
+      Array.from(part.querySelectorAll(':scope > Staff')).forEach(
+        (staff, staffIndex) => {
+          const staffId = staff.getAttribute('id')
+          if (staffId) {
+            partByStaffId.set(staffId, {
+              partIndex,
+              staffNumber: staffIndex + 1,
+            })
+          }
+        }
+      )
+    }
+  )
+
+  const markers: MscxSwingMarker[] = []
+  doc.querySelectorAll('Score > Staff').forEach((staff) => {
+    const staffId = staff.getAttribute('id')
+    const staffTarget = staffId ? partByStaffId.get(staffId) : undefined
+
+    Array.from(staff.querySelectorAll(':scope > Measure')).forEach(
+      (measure, measureIndex) => {
+        measure.querySelectorAll(':scope > voice').forEach((voice) => {
+          let cursor = 0
+          const tupletRatios: number[] = []
+
+          Array.from(voice.children).forEach((child) => {
+            if (child.tagName === 'location') {
+              cursor +=
+                parseFraction(getDirectChildText(child, 'fractions')) ?? 0
+              return
+            }
+
+            if (child.tagName === 'Tuplet') {
+              const normalNotes = Number(
+                getDirectChildText(child, 'normalNotes')
+              )
+              const actualNotes = Number(
+                getDirectChildText(child, 'actualNotes')
+              )
+              tupletRatios.push(
+                normalNotes > 0 && actualNotes > 0
+                  ? normalNotes / actualNotes
+                  : 1
+              )
+              return
+            }
+
+            if (child.tagName === 'endTuplet') {
+              tupletRatios.pop()
+              return
+            }
+
+            if (child.tagName === 'Chord' || child.tagName === 'Rest') {
+              const tupletRatio = tupletRatios.reduce(
+                (ratio, value) => ratio * value,
+                1
+              )
+              cursor += getMscxDuration(child, tupletRatio)
+              return
+            }
+
+            if (
+              child.tagName !== 'SystemText' &&
+              child.tagName !== 'StaffText'
+            ) {
+              return
+            }
+
+            const swing = getDirectChild(child, 'swing')
+            if (!swing) return
+
+            const unit = normalizeMscxSwingUnit(
+              swing.getAttribute('unit') ?? ''
+            )
+            const ratio = Number(swing.getAttribute('ratio') ?? '60')
+            if (
+              unit === undefined ||
+              !Number.isFinite(ratio) ||
+              ratio < 50 ||
+              ratio >= 100
+            ) {
+              logger.warn('対応していないSwing設定をスキップしました', {
+                unit: swing.getAttribute('unit'),
+                ratio: swing.getAttribute('ratio'),
+              })
+              return
+            }
+
+            const isSystemText = child.tagName === 'SystemText'
+            if (!isSystemText && !staffTarget) {
+              logger.warn('Swing設定の対象譜表を特定できませんでした', {
+                staffId,
+              })
+              return
+            }
+
+            markers.push({
+              measureIndex,
+              offsetInWholeNotes: Math.max(0, cursor),
+              unit,
+              ratio,
+              partIndex: isSystemText ? null : staffTarget!.partIndex,
+              staffNumber: isSystemText ? null : staffTarget!.staffNumber,
+            })
+          })
+        })
+      }
+    )
+  })
+
+  return markers
+}
+
+const parseMscxPlaybackData = (mscx: string): MscxPlaybackData | null => {
+  const doc = new DOMParser().parseFromString(mscx, 'application/xml')
+  if (doc.querySelector('parsererror')) return null
+
+  return {
+    harmonies: extractMscxHarmonies(doc),
+    chordPlayback: extractMscxChordPlayback(doc),
+    swingMarkers: extractMscxSwingMarkers(doc),
+  }
 }
 
 const addTremoloNotation = (noteXml: string, marks: number): string => {
@@ -322,7 +514,135 @@ const buildHarmonyXml = (harmony: MscxHarmony): string => {
   return lines.join('\n')
 }
 
-const restoreHarmonyFromMscz = async (
+const greatestCommonDivisor = (left: number, right: number): number => {
+  let a = Math.abs(left)
+  let b = Math.abs(right)
+  while (b !== 0) {
+    const remainder = a % b
+    a = b
+    b = remainder
+  }
+  return a || 1
+}
+
+const createSwingDirection = (
+  doc: XMLDocument,
+  marker: MscxSwingMarker,
+  divisions: number
+): Element => {
+  const direction = doc.createElement('direction')
+  direction.setAttribute('print-object', 'no')
+  const directionType = doc.createElement('direction-type')
+  const otherDirection = doc.createElement('other-direction')
+  otherDirection.setAttribute('print-object', 'no')
+  directionType.append(otherDirection)
+  direction.append(directionType)
+
+  const offset = doc.createElement('offset')
+  offset.setAttribute('sound', 'yes')
+  offset.textContent = String(
+    Math.round(marker.offsetInWholeNotes * divisions * 4)
+  )
+  direction.append(offset)
+
+  if (marker.staffNumber !== null) {
+    const staff = doc.createElement('staff')
+    staff.textContent = String(marker.staffNumber)
+    direction.append(staff)
+  }
+
+  const sound = doc.createElement('sound')
+  const swing = doc.createElement('swing')
+  if (marker.unit === null) {
+    swing.append(doc.createElement('straight'))
+  } else {
+    const roundedRatio = Math.round(marker.ratio)
+    const divisor = greatestCommonDivisor(roundedRatio, 100 - roundedRatio)
+    const first = doc.createElement('first')
+    first.textContent = String(roundedRatio / divisor)
+    const second = doc.createElement('second')
+    second.textContent = String((100 - roundedRatio) / divisor)
+    const swingType = doc.createElement('swing-type')
+    swingType.textContent = marker.unit
+    swing.append(first, second, swingType)
+  }
+  sound.append(swing)
+  direction.append(sound)
+
+  return direction
+}
+
+const restoreSwingDirections = (
+  musicXml: string,
+  swingMarkers: MscxSwingMarker[]
+): string => {
+  if (swingMarkers.length === 0) return musicXml
+
+  const doc = new DOMParser().parseFromString(musicXml, 'application/xml')
+  if (doc.querySelector('parsererror')) return musicXml
+
+  // MSCXを正として復元するため、webmscoreが一部だけ出力した場合も
+  // 重複や競合が起きないよう既存のSwing再生情報を置き換える。
+  doc.querySelectorAll('sound > swing').forEach((swing) => swing.remove())
+
+  const parts = Array.from(doc.querySelectorAll('score-partwise > part'))
+  const divisionsByPart = new Map<number, number>()
+
+  const getDivisions = (partIndex: number, measureIndex: number) => {
+    const cached = divisionsByPart.get(partIndex) ?? 1
+    const part = parts[partIndex]
+    const measures = part
+      ? Array.from(part.querySelectorAll(':scope > measure'))
+      : []
+    let divisions = 1
+    for (let index = 0; index <= measureIndex; index += 1) {
+      const value = Number(
+        measures[index]?.querySelector(':scope > attributes > divisions')
+          ?.textContent
+      )
+      if (Number.isFinite(value) && value > 0) divisions = value
+    }
+    divisionsByPart.set(partIndex, divisions || cached)
+    return divisions || cached
+  }
+
+  swingMarkers.forEach((marker) => {
+    const targetPartIndexes =
+      marker.partIndex === null
+        ? parts.map((_, index) => index)
+        : [marker.partIndex]
+
+    targetPartIndexes.forEach((partIndex) => {
+      const part = parts[partIndex]
+      const measure = part
+        ? Array.from(part.querySelectorAll(':scope > measure'))[
+            marker.measureIndex
+          ]
+        : undefined
+      if (!measure) {
+        logger.warn('Swing設定の対象小節を特定できませんでした', {
+          partIndex,
+          measureIndex: marker.measureIndex,
+        })
+        return
+      }
+
+      const direction = createSwingDirection(
+        doc,
+        marker,
+        getDivisions(partIndex, marker.measureIndex)
+      )
+      const firstTimedElement = Array.from(measure.children).find((child) =>
+        ['note', 'direction', 'backup', 'forward'].includes(child.tagName)
+      )
+      measure.insertBefore(direction, firstTimedElement ?? null)
+    })
+  })
+
+  return new XMLSerializer().serializeToString(doc)
+}
+
+const restorePlaybackMetadataFromMscz = async (
   musicXml: string,
   fileBinary: Uint8Array
 ): Promise<RestoreHarmonyResult> => {
@@ -333,12 +653,14 @@ const restoreHarmonyFromMscz = async (
     }
   }
 
-  const harmonies = extractMscxHarmonies(mscx)
-  const chordPlayback = extractMscxChordPlayback(mscx)
+  const playbackData = parseMscxPlaybackData(mscx)
+  if (!playbackData) return { musicXml }
+
+  const { harmonies, chordPlayback, swingMarkers } = playbackData
   const musicXmlWithTremolos = restoreTremolos(musicXml, chordPlayback)
   if (!harmonies.length) {
     return {
-      musicXml: musicXmlWithTremolos,
+      musicXml: restoreSwingDirections(musicXmlWithTremolos, swingMarkers),
     }
   }
 
@@ -349,15 +671,17 @@ const restoreHarmonyFromMscz = async (
       mscxHarmonyCount: harmonies.length,
     })
     return {
-      musicXml: musicXmlWithTremolos,
+      musicXml: restoreSwingDirections(musicXmlWithTremolos, swingMarkers),
     }
   }
 
   let harmonyIndex = 0
+  const musicXmlWithHarmonies = musicXmlWithTremolos.replace(
+    HARMONY_TAG_PATTERN,
+    () => buildHarmonyXml(harmonies[harmonyIndex++])
+  )
   return {
-    musicXml: musicXmlWithTremolos.replace(HARMONY_TAG_PATTERN, () =>
-      buildHarmonyXml(harmonies[harmonyIndex++])
-    ),
+    musicXml: restoreSwingDirections(musicXmlWithHarmonies, swingMarkers),
   }
 }
 
@@ -372,7 +696,7 @@ export const convertMsczToMusicXml = async (
 
   const rawMusicXml = await score.saveXml()
   assertPlayableMusicXml(rawMusicXml)
-  const restoreResult = await restoreHarmonyFromMscz(
+  const restoreResult = await restorePlaybackMetadataFromMscz(
     rawMusicXml,
     msczArchiveBinary
   )
