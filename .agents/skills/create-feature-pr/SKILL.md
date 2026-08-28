@@ -1,6 +1,6 @@
 ---
 name: create-feature-pr
-description: 未コミット変更を必要に応じて論理的な複数commitに分け、feature/{issue番号} ブランチを origin にpushし、develop向けGitHub Pull Requestを作成する。変更のcommitからPR作成まで、featureブランチの公開、develop向けレビュー依頼、または「issue番号と作業概要からPRを作って」と依頼されたときに使用する。PRタイトルは必ず「feature #{issue番号} {作業概要}」にする。
+description: 未コミット変更を必要に応じて論理的な複数commitに分け、feature/{issue番号} ブランチを origin にpushし、develop向けGitHub Pull Requestを作成する。変更のcommitからPR作成まで、featureブランチの公開、develop向けレビュー依頼、または「issue番号と作業概要からPRを作って」と依頼されたときに使用する。PRタイトルは必ず「refs #{issue番号} {作業概要}」にする。
 ---
 
 # Create Feature PR
@@ -11,12 +11,12 @@ description: 未コミット変更を必要に応じて論理的な複数commit�
 
 1. issue番号と作業概要をユーザーの依頼から取得する。
 2. issue番号が省略されている場合、現在のブランチ名が厳密に `feature/<数字>` なら、その数字を使用する。
-3. 作業概要が省略されている場合、`develop...HEAD` のコミットと差分から短い日本語の概要を作る。
+3. 作業概要が省略されている場合、事前確認で取得する最新の`origin/develop...HEAD`のコミットと差分から短い日本語の概要を作る。
 4. issue番号または作業概要を安全に確定できない場合だけ、ユーザーに確認する。
 5. 次の値を組み立てる。
    - headブランチ: `feature/{issue番号}`
    - baseブランチ: `develop`
-   - PRタイトル: `feature #{issue番号} {作業概要}`
+   - PRタイトル: `refs #{issue番号} {作業概要}`
 
 ## 事前確認する
 
@@ -28,17 +28,21 @@ git remote -v
 git branch --show-current
 git diff
 git diff --cached
-git log --oneline develop..HEAD
-git diff --stat develop...HEAD
-gh auth status
+git worktree list --porcelain
 ```
 
-- `gh auth status` は参考情報として扱い、その出力だけでGitHub認証切れと判断しない。GitHub Appが利用できる環境では、対象リポジトリのIssue検索など読み取りAPIを1回実行して実アクセスを確認する。CLIを使う場合は `gh api repos/{owner}/{repo}`、push認証は対象ブランチへの実際の `git push` で確認する。
-- GitHub Appの読み取りが成功した場合、`gh` の保存トークンが無効でもGitHub全体の認証切れとは報告しない。Issue・PR操作はGitHub Appを優先し、pushだけGitの認証経路で実行する。
-- 認証切れとしてユーザー対応を求めるのは、実行に必要なGitHub App、`gh api`、または`git push`の実リクエストが認証エラーで失敗し、利用可能な代替経路もない場合だけにする。DNS、sandbox、ネットワーク到達性の失敗を認証エラーとして扱わない。
+- GitHub操作の前に`docs/GITHUB_AUTHENTICATION.md`を読み、GitHub App、`gh`、`git push`の確認順序とフォールバック条件に従う。
 - Gitリポジトリ内でない、`origin` がない、利用可能なGitHubアクセス経路がない、または現在のブランチが期待する `feature/{issue番号}` と異なる場合は、pushせず状況を報告する。
 - issue番号は数字のみを許可する。
 - 既にstage済みの変更を勝手にunstageしない。対象作業と無関係な変更が混在し、安全に分離できない場合だけユーザーに確認する。
+
+認証確認後、最新のbaseとの差分を把握するため`develop`をfetchし、比較する。
+
+```bash
+git fetch origin develop
+git log --oneline origin/develop..HEAD
+git diff --stat origin/develop...HEAD
+```
 
 ## 変更を分けてcommitする
 
@@ -58,7 +62,7 @@ git commit -m "refs #{issue番号} {commitの内容を表す短い概要}"
 ```
 
 8. 各commit後に `git status --short` と `git show --stat --oneline HEAD` を確認する。既存commitのamendや履歴の書き換えは、ユーザーが明示的に求めた場合だけ行う。
-9. 対象変更をすべてcommitした後、`git log --oneline develop..HEAD` と `git diff --stat develop...HEAD` を再確認する。PR対象のcommitがない場合はpushせず報告する。今回の作業と無関係な未コミット変更は変更せず、完了報告に残っていることを記載する。
+9. 対象変更をすべてcommitした後、`git fetch origin develop`を実行し、`git log --oneline origin/develop..HEAD`と`git diff --stat origin/develop...HEAD`を再確認する。PR対象のcommitがない場合はpushせず報告する。今回の作業と無関係な未コミット変更は変更せず、完了報告に残っていることを記載する。
 
 ## PushしてPRを作成する
 
@@ -68,21 +72,21 @@ git commit -m "refs #{issue番号} {commitの内容を表す短い概要}"
 git push --set-upstream origin "feature/{issue番号}"
 ```
 
-2. push成功後、同じhead/baseの既存PRを確認する。GitHub Appが利用可能ならPR検索を優先し、利用できない場合のみ`gh`を使う。
+2. push成功後、同じhead/baseの既存PRを確認する。GitHub Appによる検索を優先し、`docs/GITHUB_AUTHENTICATION.md`で定義された条件を満たす場合だけ`gh`へフォールバックする。
 
 ```bash
 gh pr list --head "feature/{issue番号}" --base develop --state all --json number,state,url,title
 ```
 
 3. openなPRがすでにある場合は重複作成せず、pushで更新された既存PRのURLを返す。closedまたはmergedのPRしかない場合は、その事実を報告し、新規PRを作るかユーザーに確認する。
-4. 差分とコミットから、簡潔な本文を `概要` と `確認内容` の見出し付きで作る。実行していないテストを実行済みと書かない。
-5. GitHub Appが利用可能ならそれを使い、なければ`gh pr create`でPRを作成する。タイトルは一字一句、指定形式に従う。CLIの場合、本文は一時ファイルに保存して`--body-file`で渡し、シェル展開の事故を避ける。
+4. `.github/PULL_REQUEST_TEMPLATE.md`を読み、見出しの順序と文言を変更せずに本文を作る。`Closes #{issue番号}`、変更内容、設計上の要点、実行済み検証を事実どおり記載し、UI変更がない場合もスクリーンショットの見出しを削除せず「変更なし」と記載する。実行していないテストを実行済みと書かない。
+5. GitHub Appが利用可能ならそれを使い、`docs/GITHUB_AUTHENTICATION.md`で定義された条件を満たす場合だけ`gh pr create`へフォールバックする。タイトルは一字一句、指定形式に従う。CLIの場合、完成したテンプレート本文は一時ファイルに保存して`--body-file`で渡し、シェル展開の事故を避ける。
 
 ```bash
 gh pr create \
   --base develop \
   --head "feature/{issue番号}" \
-  --title "feature #{issue番号} {作業概要}" \
+  --title "refs #{issue番号} {作業概要}" \
   --body-file "<一時ファイル>"
 ```
 
