@@ -1,6 +1,7 @@
 const stableVersionPattern =
   '(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)'
-const prereleasePattern = '(?:-[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?'
+const prereleaseIdentifierPattern = '(?:0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*)'
+const prereleasePattern = `(?:-${prereleaseIdentifierPattern}(?:\\.${prereleaseIdentifierPattern})*)?`
 const buildPattern = '(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?'
 const releaseTitlePattern = new RegExp(
   `^release: (v${stableVersionPattern}${prereleasePattern}${buildPattern})$`
@@ -21,7 +22,8 @@ export const parseReleaseVersion = (title) => {
 export const shouldPublishRelease = ({ headRef, merged }) =>
   merged === 'true' && headRef === 'develop'
 
-export const isPrereleaseVersion = (version) => version.includes('-')
+export const isPrereleaseVersion = (version) =>
+  version.split('+', 1)[0].includes('-')
 
 const requestGitHub = async ({ body, method = 'GET', path, token }) => {
   const response = await fetch(`https://api.github.com${path}`, {
@@ -51,7 +53,34 @@ const getTagCommitSha = async ({ repository, token, version }) => {
     throw new Error(`タグの確認に失敗しました（HTTP ${result.status}）。`)
   }
 
-  return result.body.object.sha
+  let object = result.body.object
+  const visitedTagShas = new Set()
+
+  while (object.type === 'tag') {
+    if (visitedTagShas.has(object.sha)) {
+      throw new Error(`${version}タグの参照が循環しています。`)
+    }
+    visitedTagShas.add(object.sha)
+
+    const tagResult = await requestGitHub({
+      path: `/repos/${repository}/git/tags/${encodeURIComponent(object.sha)}`,
+      token,
+    })
+
+    if (!tagResult.ok) {
+      throw new Error(
+        `注釈付きタグの確認に失敗しました（HTTP ${tagResult.status}）。`
+      )
+    }
+
+    object = tagResult.body.object
+  }
+
+  if (object.type !== 'commit') {
+    throw new Error(`${version}タグがコミットを指していません。`)
+  }
+
+  return object.sha
 }
 
 const getRelease = async ({ repository, token, version }) => {
