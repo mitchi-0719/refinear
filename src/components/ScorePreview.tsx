@@ -16,6 +16,7 @@ import {
   buildPlaybackCursorIndex,
   findNearestPlaybackCursorAnchor,
 } from '../lib/playbackCursorIndex'
+import type { SwingChange } from '../lib/swingPlayback'
 import { useScoreStore } from '../stores/useScoreStore'
 import { ControlModal } from './controlModal/ControlModal'
 import type {
@@ -36,6 +37,7 @@ type ParsedEventsState = {
   musicXml: string
   events: NoteEvent[]
   tempoChanges: TempoChange[]
+  swingChanges: SwingChange[]
 }
 
 type MeasureAnchor = {
@@ -308,21 +310,32 @@ export const ScorePreview = () => {
     musicXml && parsedEventsState?.musicXml === musicXml
       ? parsedEventsState.tempoChanges
       : []
+  const swingChanges =
+    musicXml && parsedEventsState?.musicXml === musicXml
+      ? parsedEventsState.swingChanges
+      : []
 
   useEffect(() => {
     if (!musicXml) return
 
     let cancelled = false
     void parseMusicXmlForEvents(musicXml)
-      .then(({ events, tempoChanges: parsedTempoChanges }) => {
-        if (!cancelled) {
-          setParsedEventsState({
-            musicXml,
-            events,
-            tempoChanges: parsedTempoChanges,
-          })
+      .then(
+        ({
+          events,
+          tempoChanges: parsedTempoChanges,
+          swingChanges: parsedSwingChanges,
+        }) => {
+          if (!cancelled) {
+            setParsedEventsState({
+              musicXml,
+              events,
+              tempoChanges: parsedTempoChanges,
+              swingChanges: parsedSwingChanges,
+            })
+          }
         }
-      })
+      )
       .catch((error: unknown) => {
         logger.error('MusicXML event parsing failed:', error)
         if (!cancelled) {
@@ -330,6 +343,7 @@ export const ScorePreview = () => {
             musicXml,
             events: EMPTY_NOTE_EVENTS,
             tempoChanges: [],
+            swingChanges: [],
           })
         }
       })
@@ -443,6 +457,7 @@ export const ScorePreview = () => {
   const { play, stop, playNote, mixerControls, playbackControls } =
     useAudioPlayer(parsedEvents, {
       tempoChanges,
+      swingChanges,
       onNoteStart: (event) => syncPlaybackCursor(event.time),
       onPlaybackStart: startPlaybackCursor,
       onPlaybackStop: () => {

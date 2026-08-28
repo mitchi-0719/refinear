@@ -7,10 +7,12 @@ import { PIANO_MAP } from '../constants/piano'
 import { configurePlaybackAudioSession } from '../lib/audioSession'
 import { logger } from '../lib/logger'
 import type { NoteEvent, SamplerId, TempoChange } from '../lib/musicXmlParser'
+import { type SwingChange, getSwingPlaybackTiming } from '../lib/swingPlayback'
 import { useScoreStore } from '../stores/useScoreStore'
 
 type AudioPlayerOptions = {
   tempoChanges?: TempoChange[]
+  swingChanges?: SwingChange[]
   onNoteStart?: (event: NoteEvent) => void
   onPlaybackStart?: (startTicks: number) => void
   onPlaybackStop?: () => void
@@ -772,10 +774,15 @@ export const useAudioPlayer = (
     }
     if (!toneReady || !_toneModule) return
 
-    const partEvents = parsedEvents.map((event) => ({
-      time: `${event.time}i`,
-      event,
-    }))
+    const swingChanges = options.swingChanges ?? []
+    const partEvents = parsedEvents.map((event) => {
+      const playbackTiming = getSwingPlaybackTiming(event, swingChanges)
+      return {
+        time: `${playbackTiming.time}i`,
+        event,
+        playbackDuration: playbackTiming.duration,
+      }
+    })
 
     const Tone = _toneModule!
     const transport = Tone.getTransport()
@@ -796,8 +803,15 @@ export const useAudioPlayer = (
     })
 
     partRef.current = new Tone.Part((time, value) => {
-      const { event } = value
+      const { event, playbackDuration } = value
       if (event.isRest || event.isTieContinuation) return
+
+      const glissandoDuration =
+        event.glissandoDuration === null
+          ? null
+          : event.glissandoDuration === event.duration
+            ? playbackDuration
+            : event.glissandoDuration
 
       Tone.getDraw().schedule(() => {
         onNoteStartRef.current?.(event)
@@ -814,15 +828,15 @@ export const useAudioPlayer = (
           event.samplerId === 'piano' &&
           event.glissandoMode !== null &&
           event.glissandoTargetMidi !== null &&
-          event.glissandoDuration !== null &&
-          event.glissandoDuration > 0 &&
+          glissandoDuration !== null &&
+          glissandoDuration > 0 &&
           event.glissandoTargetMidi !== event.midi
         ) {
           const buffers = sharedSampleBuffersRef.current.piano
           const channel = partChannelsRef.current[event.partId]
           if (!buffers || !channel) return
 
-          const endTime = time + Tone.Ticks(event.glissandoDuration).toSeconds()
+          const endTime = time + Tone.Ticks(glissandoDuration).toSeconds()
           const pianoKeyMap = getPianoSampleKeyByMidi(Tone)
           const sampleKeys = Array.from(
             new Set([
@@ -854,15 +868,15 @@ export const useAudioPlayer = (
               source.dispose()
             }
             source.playbackRate.linearRampToValueAtTime(endRate, endTime)
-            source.start(time, 0, `${event.glissandoDuration}i`, sourceGain)
+            source.start(time, 0, `${glissandoDuration}i`, sourceGain)
           })
           return
         }
 
         if (
           event.glissandoTargetMidi !== null &&
-          event.glissandoDuration !== null &&
-          event.glissandoDuration > 0 &&
+          glissandoDuration !== null &&
+          glissandoDuration > 0 &&
           event.glissandoTargetMidi !== event.midi
         ) {
           const glissandoSampler =
@@ -873,15 +887,15 @@ export const useAudioPlayer = (
 
           const direction = event.glissandoTargetMidi > event.midi ? 1 : -1
           const stepCount = Math.abs(event.glissandoTargetMidi - event.midi)
-          const glissandoWindow = event.glissandoDuration * GLISSANDO_PORTION
-          const headDuration = event.glissandoDuration - glissandoWindow
+          const glissandoWindow = glissandoDuration * GLISSANDO_PORTION
+          const headDuration = glissandoDuration - glissandoWindow
           const intermediateCount = Math.max(1, stepCount - 1)
           const stepDuration = glissandoWindow / intermediateCount
 
           // 頭の音を約2/3保持し、中間音は末尾1/3で重ならないよう順に鳴らす。
           sampler.triggerAttackRelease(
             event.playbackKey,
-            `${Math.min(event.duration, headDuration)}i`,
+            `${Math.min(playbackDuration, headDuration)}i`,
             time,
             getDynamicGain(event.velocity) *
               samplerVolumeMultiplier *
@@ -918,11 +932,11 @@ export const useAudioPlayer = (
         ) {
           const hitDuration = Math.min(
             event.rollSubdivision * 0.8,
-            event.duration
+            playbackDuration
           )
           for (
             let offset = 0;
-            offset < event.duration;
+            offset < playbackDuration;
             offset += event.rollSubdivision
           ) {
             sampler.triggerAttackRelease(
@@ -942,7 +956,7 @@ export const useAudioPlayer = (
         const gateTime = event.isStaccato ? 0.5 : 1
         sampler.triggerAttackRelease(
           event.playbackKey,
-          `${event.duration * gateTime}i`,
+          `${playbackDuration * gateTime}i`,
           time,
           getDynamicGain(event.velocity) * samplerVolumeMultiplier
         )
@@ -956,7 +970,7 @@ export const useAudioPlayer = (
       tempoScheduleIdsRef.current.forEach((id) => transport.clear(id))
       tempoScheduleIdsRef.current = []
     }
-  }, [options.tempoChanges, parsedEvents, toneReady])
+  }, [options.swingChanges, options.tempoChanges, parsedEvents, toneReady])
 
   // isPlaying に応じて Transport の開始/停止を同期
   useEffect(() => {
