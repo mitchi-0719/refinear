@@ -8,6 +8,9 @@ import { waitFrame } from '../lib/waitFrame'
 // 楽譜を初回表示する際の拡大率。必要に応じてここを調整する。
 export const DEFAULT_SCORE_ZOOM = 0.35
 
+const removeSlideNotations = (musicXml: string) =>
+  musicXml.replace(/<slide\b[^>]*(?:\/>|>[\s\S]*?<\/slide\s*>)/g, '')
+
 export const useOSMD = (
   musicXml: string | null,
   musicMxl: Uint8Array | null = null,
@@ -115,7 +118,16 @@ export const useOSMD = (
 
         if (musicXml) {
           try {
-            await osmd.load(musicXml)
+            // OSMD 2.0.0 は、slide が譜表の改行をまたぐと
+            // GraphicalGlissando 内で描画エラーになることがある。
+            // 表示用の入力から slide だけを除き、glissando は描画する。
+            const displayMusicXml = removeSlideNotations(musicXml)
+            if (displayMusicXml !== musicXml) {
+              logger.warn(
+                '[useOSMD] Removed slide notations from display XML to avoid an OSMD layout error'
+              )
+            }
+            await osmd.load(displayMusicXml)
           } catch (xmlError) {
             if (!musicMxl || isCancelled) throw xmlError
 
@@ -138,15 +150,6 @@ export const useOSMD = (
           return
         }
 
-        // OSMD 2.0.0 は、一部の MusicXML の slide を譜表の改行位置に
-        // 描画すると GraphicalGlissando 内で HasEndLine 参照に失敗する。
-        // XML や再生情報は保持し、該当する楽譜でスライド線の描画だけを止める。
-        if (musicXml && /<slide\b/.test(musicXml)) {
-          logger.warn(
-            '[useOSMD] Disabling slide rendering to avoid an OSMD layout error'
-          )
-          osmd.EngravingRules.RenderGlissandi = false
-        }
         isLoadedRef.current = true
 
         // 描画準備中に変更された倍率も、初回描画に反映する。
