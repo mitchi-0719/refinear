@@ -8,9 +8,6 @@ import { waitFrame } from '../lib/waitFrame'
 // 楽譜を初回表示する際の拡大率。必要に応じてここを調整する。
 export const DEFAULT_SCORE_ZOOM = 0.35
 
-const removeSlideNotations = (musicXml: string) =>
-  musicXml.replace(/<slide\b[^>]*(?:\/>|>[\s\S]*?<\/slide\s*>)/g, '')
-
 export const useOSMD = (
   musicXml: string | null,
   musicMxl: Uint8Array | null = null,
@@ -118,16 +115,7 @@ export const useOSMD = (
 
         if (musicXml) {
           try {
-            // OSMD 2.0.0 は、slide が譜表の改行をまたぐと
-            // GraphicalGlissando 内で描画エラーになることがある。
-            // 表示用の入力から slide だけを除き、glissando は描画する。
-            const displayMusicXml = removeSlideNotations(musicXml)
-            if (displayMusicXml !== musicXml) {
-              logger.warn(
-                '[useOSMD] Removed slide notations from display XML to avoid an OSMD layout error'
-              )
-            }
-            await osmd.load(displayMusicXml)
+            await osmd.load(musicXml)
           } catch (xmlError) {
             if (!musicMxl || isCancelled) throw xmlError
 
