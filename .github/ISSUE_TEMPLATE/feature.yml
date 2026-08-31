@@ -6,8 +6,23 @@ projects: [mitchi-0719/4]
 assignees: [mitchi-0719]
 body:
   - type: textarea
-    id: details
+    id: request
     attributes:
-      label: 内容
+      label: やりたいこと
+      description: 追加したい機能を記入してください。
+    validations:
+      required: true
+  - type: textarea
+    id: background
+    attributes:
+      label: 背景・目的
+      description: なぜ必要かを記入してください。
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: 完了条件
+      description: 完了を確認できる状態を記入してください。
     validations:
       required: true
