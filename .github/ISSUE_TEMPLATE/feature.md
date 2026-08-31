@@ -1,17 +1,19 @@
 ---
-name: Feature Request
-about: 新機能の開発
+name: 機能要望
+about: 新しい機能を提案する
 title: 'feat: '
-labels: ''
-assignees: 'mitchi-0719'
+labels: feature
+assignees: mitchi-0719
 ---
 
 ## やりたいこと
 
-- ""
+<!-- 追加したい機能を記入してください。 -->
 
-## ✅ 完了条件 (Acceptance Criteria)
+## 背景・目的
 
-- [ ]
-- [ ]
-- [ ]
+<!-- なぜ必要かを記入してください。 -->
+
+## 完了条件
+
+<!-- 完了を確認できる状態を記入してください。 -->
