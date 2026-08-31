@@ -3031,7 +3031,7 @@ IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 ================================================================================
 
-opensheetmusicdisplay@2.0.0
+opensheetmusicdisplay@2.1.2
 License: BSD-3-Clause
 
 --- LICENSE ---
