@@ -1,0 +1,13 @@
+name: 改善要望
+description: 既存機能の改善を提案する
+title: 'feat: '
+labels: [enhancement]
+projects: [mitchi-0719/4]
+assignees: [mitchi-0719]
+body:
+  - type: textarea
+    id: details
+    attributes:
+      label: 内容
+    validations:
+      required: true

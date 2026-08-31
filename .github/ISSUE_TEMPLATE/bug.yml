@@ -1,0 +1,13 @@
+name: バグ報告
+description: 不具合を報告する
+title: 'fix: '
+labels: [bug]
+projects: [mitchi-0719/4]
+assignees: [mitchi-0719]
+body:
+  - type: textarea
+    id: details
+    attributes:
+      label: 内容
+    validations:
+      required: true

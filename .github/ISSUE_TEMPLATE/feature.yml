@@ -1,0 +1,13 @@
+name: 機能要望
+description: 新しい機能を提案する
+title: 'feat: '
+labels: [feature]
+projects: [mitchi-0719/4]
+assignees: [mitchi-0719]
+body:
+  - type: textarea
+    id: details
+    attributes:
+      label: 内容
+    validations:
+      required: true
