@@ -15,8 +15,8 @@ export default defineConfig({
   ],
   build: {
     // OSMD is loaded only after a score is selected. Its minified package is
-    // currently about 1.25 MB, so keep the warning narrowly above that known
+    // currently about 1.30 MB, so keep the warning narrowly above that known
     // lazy chunk instead of masking future multi-megabyte regressions.
-    chunkSizeWarningLimit: 1300,
+    chunkSizeWarningLimit: 1350,
   },
 })

@@ -138,15 +138,6 @@ export const useOSMD = (
           return
         }
 
-        // OSMD 2.0.0 は、一部の MusicXML の slide を譜表の改行位置に
-        // 描画すると GraphicalGlissando 内で HasEndLine 参照に失敗する。
-        // XML や再生情報は保持し、該当する楽譜でスライド線の描画だけを止める。
-        if (musicXml && /<slide\b/.test(musicXml)) {
-          logger.warn(
-            '[useOSMD] Disabling slide rendering to avoid an OSMD layout error'
-          )
-          osmd.EngravingRules.RenderGlissandi = false
-        }
         isLoadedRef.current = true
 
         // 描画準備中に変更された倍率も、初回描画に反映する。
