@@ -18,6 +18,7 @@
     "prepare": "husky",
     "preview": "vite preview",
     "preview:cloudflare": "npm run build && wrangler dev",
+    "test:grace": "node --test scripts/graceNotePlayback.test.mjs",
     "test:release": "node --test scripts/releaseVersion.test.mjs",
     "test:swing": "node --test scripts/swingPlayback.test.mjs"
   },
