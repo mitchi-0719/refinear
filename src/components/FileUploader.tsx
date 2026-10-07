@@ -12,11 +12,12 @@ import {
   createScoreId,
   deleteCachedScore,
   getCachedScore,
-  isCompatibleCachedScore,
+  getCachedScoreCompatibility,
   listRecentScores,
   saveCachedScore,
   touchCachedScore,
 } from '../lib/scoreHistory'
+import { showSnackbar } from '../lib/snackbar'
 import { useScoreStore } from '../stores/useScoreStore'
 import { Alert, AlertDescription, AlertTitle } from './ui/Alert'
 import { Icon } from './ui/Icon'
@@ -215,7 +216,7 @@ export const FileUploader = () => {
       setLoading(true)
 
       try {
-        if (!isCompatibleCachedScore(item)) {
+        if (getCachedScoreCompatibility(item) === 'incompatible') {
           await deleteCachedScore(item.id)
           await refreshHistory()
           throw new Error(
@@ -224,9 +225,12 @@ export const FileUploader = () => {
         }
 
         const cachedScore = await getCachedScore(item.id)
+        const compatibility = cachedScore
+          ? getCachedScoreCompatibility(cachedScore)
+          : 'incompatible'
         if (
           !cachedScore ||
-          !isCompatibleCachedScore(cachedScore) ||
+          compatibility === 'incompatible' ||
           typeof cachedScore.musicXml !== 'string' ||
           cachedScore.musicXml.length === 0
         ) {
@@ -235,6 +239,14 @@ export const FileUploader = () => {
           throw new Error(
             '履歴データを読み込めません。MSCZファイルを再度選択してください。'
           )
+        }
+
+        if (compatibility === 'legacy') {
+          showSnackbar({
+            message:
+              'ファイル情報が古いです。正確に表示するには元ファイルを再選択してください',
+            variant: 'warning',
+          })
         }
 
         setConvertedScore({
