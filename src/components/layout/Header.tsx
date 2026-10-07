@@ -1,6 +1,7 @@
 import { useState } from 'react'
 
 import { featureFlags } from '../../config/featureFlags'
+import { useBodyScrollLock } from '../../hooks/useBodyScrollLock'
 import { useScoreStore } from '../../stores/useScoreStore'
 import { Icon } from '../ui/Icon'
 
@@ -13,6 +14,8 @@ export const Header = ({ hasScore, onOpenInstallGuide }: HeaderProps) => {
   const [isAboutOpen, setIsAboutOpen] = useState(false)
   const fileName = useScoreStore((state) => state.fileName)
   const reset = useScoreStore((state) => state.reset)
+
+  useBodyScrollLock(isAboutOpen)
 
   const returnHome = () => {
     reset()
@@ -76,7 +79,7 @@ export const Header = ({ hasScore, onOpenInstallGuide }: HeaderProps) => {
 
       {isAboutOpen && (
         <div
-          className="fixed inset-0 z-100 grid place-items-center bg-slate-950/35 p-5"
+          className="fixed inset-0 z-100 grid place-items-center overflow-y-auto overscroll-contain bg-slate-950/35 p-5"
           role="presentation"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) setIsAboutOpen(false)
@@ -86,7 +89,7 @@ export const Header = ({ hasScore, onOpenInstallGuide }: HeaderProps) => {
             role="dialog"
             aria-modal="true"
             aria-labelledby="about-title"
-            className="w-full max-w-md rounded-3xl bg-white p-6 text-[#071b47] shadow-2xl"
+            className="my-auto w-full max-w-md rounded-3xl bg-white p-6 text-[#071b47] shadow-2xl"
           >
             <div className="flex items-start justify-between gap-4">
               <div>
