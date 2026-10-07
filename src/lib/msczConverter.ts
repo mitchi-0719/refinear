@@ -1,3 +1,4 @@
+import { isAccidentalImpliedByKeySignature, isPitchStep } from './keySignature'
 import { logger } from './logger'
 
 interface MusicScoreExport {
@@ -21,7 +22,7 @@ type ChordKind = {
   text?: string
 }
 
-type RestoreHarmonyResult = {
+type RestorePlaybackMetadataResult = {
   musicXml: string
 }
 
@@ -40,10 +41,23 @@ type MscxSwingMarker = {
   staffNumber: number | null
 }
 
+type MscxKeySignature = {
+  measureIndex: number
+  fifths: number
+}
+
+type MscxStaffNotation = {
+  partIndex: number
+  staffNumber: number
+  keySignatures: MscxKeySignature[]
+  explicitAccidentalsByMeasure: boolean[][]
+}
+
 type MscxPlaybackData = {
   harmonies: MscxHarmony[]
   chordPlayback: MscxChordPlayback[]
   swingMarkers: MscxSwingMarker[]
+  staffNotations: MscxStaffNotation[]
 }
 
 const HARMONY_TAG_PATTERN = /<harmony\b[\s\S]*?<\/harmony>/g
@@ -128,6 +142,9 @@ const getDirectChild = (element: Element, tagName: string): Element | null => {
 const getDirectChildText = (element: Element, tagName: string): string => {
   return getDirectChild(element, tagName)?.textContent?.trim() ?? ''
 }
+
+const getDirectChildren = (element: Element, tagName: string): Element[] =>
+  Array.from(element.children).filter((child) => child.tagName === tagName)
 
 const escapeXml = (value: string): string =>
   value
@@ -245,6 +262,78 @@ const extractMscxChordPlayback = (doc: Document): MscxChordPlayback[] => {
           : null,
     }
   })
+}
+
+const parseStandardFifths = (keySignature: Element): number | null => {
+  const value =
+    getDirectChildText(keySignature, 'concertKey') ||
+    getDirectChildText(keySignature, 'accidental')
+  const fifths = Number(value)
+
+  return Number.isInteger(fifths) && Math.abs(fifths) <= 7 ? fifths : null
+}
+
+const extractMscxStaffNotations = (doc: Document): MscxStaffNotation[] => {
+  const score = doc.querySelector('Score')
+  if (!score) return []
+
+  const parts = getDirectChildren(score, 'Part')
+  const staves = getDirectChildren(score, 'Staff')
+  const staffCounts = parts.map(
+    (part) => getDirectChildren(part, 'Staff').length
+  )
+
+  if (staffCounts.reduce((sum, count) => sum + count, 0) !== staves.length) {
+    logger.warn('譜表数が一致しないため調号補正をスキップしました', {
+      partStaffCount: staffCounts.reduce((sum, count) => sum + count, 0),
+      scoreStaffCount: staves.length,
+    })
+    return []
+  }
+
+  const notations: MscxStaffNotation[] = []
+  let sourceStaffIndex = 0
+
+  staffCounts.forEach((staffCount, partIndex) => {
+    for (let staffNumber = 1; staffNumber <= staffCount; staffNumber += 1) {
+      const staff = staves[sourceStaffIndex++]
+      if (!staff) continue
+
+      const keySignatures: MscxKeySignature[] = []
+      const explicitAccidentalsByMeasure: boolean[][] = []
+
+      getDirectChildren(staff, 'Measure').forEach((measure, measureIndex) => {
+        const voices = getDirectChildren(measure, 'voice')
+        const keySignature = voices
+          .flatMap((voice) => getDirectChildren(voice, 'KeySig'))
+          .find((candidate) => parseStandardFifths(candidate) !== null)
+        const fifths = keySignature ? parseStandardFifths(keySignature) : null
+
+        if (fifths !== null) {
+          keySignatures.push({ measureIndex, fifths })
+        }
+
+        explicitAccidentalsByMeasure.push(
+          voices.flatMap((voice) =>
+            getDirectChildren(voice, 'Chord').flatMap((chord) =>
+              getDirectChildren(chord, 'Note').map((note) =>
+                Boolean(getDirectChild(note, 'Accidental'))
+              )
+            )
+          )
+        )
+      })
+
+      notations.push({
+        partIndex,
+        staffNumber,
+        keySignatures,
+        explicitAccidentalsByMeasure,
+      })
+    }
+  })
+
+  return notations
 }
 
 const DURATION_IN_WHOLE_NOTES: Record<string, number> = {
@@ -427,7 +516,295 @@ const parseMscxPlaybackData = (mscx: string): MscxPlaybackData | null => {
     harmonies: extractMscxHarmonies(doc),
     chordPlayback: extractMscxChordPlayback(doc),
     swingMarkers: extractMscxSwingMarkers(doc),
+    staffNotations: extractMscxStaffNotations(doc),
   }
+}
+
+const getMeasureAttributes = (measure: Element): Element[] =>
+  getDirectChildren(measure, 'attributes')
+
+const getOriginalKeyChanges = (
+  measures: Element[],
+  staffCount: number
+): Array<Array<number | null>> => {
+  return measures.map((measure) => {
+    const changes = Array<number | null>(staffCount).fill(null)
+
+    getMeasureAttributes(measure).forEach((attributes) => {
+      getDirectChildren(attributes, 'key').forEach((key) => {
+        const fifths = Number(getDirectChildText(key, 'fifths'))
+        if (!Number.isInteger(fifths) || Math.abs(fifths) > 7) return
+
+        const number = Number(key.getAttribute('number'))
+        if (Number.isInteger(number) && number >= 1 && number <= staffCount) {
+          changes[number - 1] = fifths
+          return
+        }
+
+        changes.fill(fifths)
+      })
+    })
+
+    return changes
+  })
+}
+
+const createMusicXmlKey = (
+  doc: XMLDocument,
+  fifths: number,
+  staffNumber: number | null
+): Element => {
+  const key = doc.createElement('key')
+  if (staffNumber !== null) key.setAttribute('number', String(staffNumber))
+  const fifthsElement = doc.createElement('fifths')
+  fifthsElement.textContent = String(fifths)
+  key.append(fifthsElement)
+  return key
+}
+
+const replaceMeasureKeys = (
+  doc: XMLDocument,
+  measure: Element,
+  fifthsByStaff: number[]
+): void => {
+  const existingAttributes = getMeasureAttributes(measure)
+  existingAttributes.forEach((attributes) => {
+    getDirectChildren(attributes, 'key').forEach((key) => key.remove())
+  })
+
+  let attributes = existingAttributes[0]
+  if (!attributes) {
+    attributes = doc.createElement('attributes')
+    const firstTimedElement = Array.from(measure.children).find((child) =>
+      ['direction', 'harmony', 'note', 'backup', 'forward'].includes(
+        child.tagName
+      )
+    )
+    measure.insertBefore(attributes, firstTimedElement ?? null)
+  }
+
+  const allStavesUseSameKey = fifthsByStaff.every(
+    (fifths) => fifths === fifthsByStaff[0]
+  )
+  const keys = allStavesUseSameKey
+    ? [createMusicXmlKey(doc, fifthsByStaff[0] ?? 0, null)]
+    : fifthsByStaff.map((fifths, index) =>
+        createMusicXmlKey(doc, fifths, index + 1)
+      )
+  const insertionPoint = Array.from(attributes.children).find((child) =>
+    [
+      'time',
+      'staves',
+      'part-symbol',
+      'instruments',
+      'clef',
+      'staff-details',
+      'transpose',
+      'directive',
+      'measure-style',
+    ].includes(child.tagName)
+  )
+  keys.forEach((key) => attributes.insertBefore(key, insertionPoint ?? null))
+}
+
+const removeGeneratedKeyAccidentals = ({
+  activeOriginalFifths,
+  activeSourceFifths,
+  measure,
+  measureIndex,
+  staffNotations,
+}: {
+  activeOriginalFifths: number[]
+  activeSourceFifths: Array<number | null>
+  measure: Element
+  measureIndex: number
+  staffNotations: MscxStaffNotation[]
+}): void => {
+  const pitchedNotesByStaff = Array.from(
+    { length: staffNotations.length },
+    () => [] as Element[]
+  )
+
+  getDirectChildren(measure, 'note').forEach((note) => {
+    if (!getDirectChild(note, 'pitch')) return
+    const staffNumber = Number(getDirectChildText(note, 'staff') || '1')
+    pitchedNotesByStaff[staffNumber - 1]?.push(note)
+  })
+
+  pitchedNotesByStaff.forEach((notes, staffIndex) => {
+    const sourceFlags =
+      staffNotations[staffIndex]?.explicitAccidentalsByMeasure[measureIndex]
+    if (!sourceFlags || sourceFlags.length !== notes.length) {
+      if (notes.some((note) => getDirectChild(note, 'accidental'))) {
+        logger.warn(
+          '音符数が一致しないため不要な臨時記号の除去をスキップしました',
+          {
+            measureIndex,
+            musicXmlNoteCount: notes.length,
+            sourceNoteCount: sourceFlags?.length ?? 0,
+            staffNumber: staffIndex + 1,
+          }
+        )
+      }
+      return
+    }
+
+    const sourceFifths = activeSourceFifths[staffIndex]
+    if (
+      sourceFifths === null ||
+      sourceFifths === activeOriginalFifths[staffIndex]
+    ) {
+      return
+    }
+
+    notes.forEach((note, noteIndex) => {
+      if (sourceFlags[noteIndex]) return
+
+      const accidental = getDirectChild(note, 'accidental')
+      const pitch = getDirectChild(note, 'pitch')
+      const step = pitch ? getDirectChildText(pitch, 'step') : ''
+      const alter = Number(pitch ? getDirectChildText(pitch, 'alter') : '0')
+      if (
+        !accidental ||
+        !isPitchStep(step) ||
+        !Number.isFinite(alter) ||
+        Array.from(accidental.attributes).some(({ name }) =>
+          ['bracket', 'cautionary', 'editorial', 'parentheses'].includes(name)
+        )
+      ) {
+        return
+      }
+
+      if (
+        isAccidentalImpliedByKeySignature({
+          accidental: accidental.textContent?.trim() ?? '',
+          alter,
+          fifths: sourceFifths,
+          step,
+        })
+      ) {
+        accidental.remove()
+      }
+    })
+  })
+}
+
+const restoreKeySignatures = (
+  musicXml: string,
+  staffNotations: MscxStaffNotation[]
+): string => {
+  if (!staffNotations.some(({ keySignatures }) => keySignatures.length > 0)) {
+    return musicXml
+  }
+
+  const doc = new DOMParser().parseFromString(musicXml, 'application/xml')
+  if (doc.querySelector('parsererror')) return musicXml
+
+  const parts = Array.from(doc.querySelectorAll('score-partwise > part'))
+  const sourcePartCount =
+    Math.max(...staffNotations.map(({ partIndex }) => partIndex), -1) + 1
+  if (parts.length !== sourcePartCount) {
+    logger.warn('パート数が一致しないため調号補正をスキップしました', {
+      musicXmlPartCount: parts.length,
+      mscxPartCount: sourcePartCount,
+    })
+    return musicXml
+  }
+
+  parts.forEach((part, partIndex) => {
+    const partStaffNotations = staffNotations
+      .filter((notation) => notation.partIndex === partIndex)
+      .sort((left, right) => left.staffNumber - right.staffNumber)
+    if (
+      partStaffNotations.length === 0 ||
+      !partStaffNotations.some(({ keySignatures }) => keySignatures.length > 0)
+    ) {
+      return
+    }
+
+    const measures = getDirectChildren(part, 'measure')
+    const sourceMeasureCounts = new Set(
+      partStaffNotations.map(
+        ({ explicitAccidentalsByMeasure }) =>
+          explicitAccidentalsByMeasure.length
+      )
+    )
+    const declaredStaffCount = Number(
+      measures
+        .flatMap((measure) => getMeasureAttributes(measure))
+        .map((attributes) => getDirectChildText(attributes, 'staves'))
+        .find(Boolean) ?? '1'
+    )
+    if (
+      sourceMeasureCounts.size !== 1 ||
+      !sourceMeasureCounts.has(measures.length) ||
+      declaredStaffCount !== partStaffNotations.length
+    ) {
+      logger.warn(
+        'パート内の譜表数または小節数が一致しないため調号補正をスキップしました',
+        {
+          musicXmlMeasureCount: measures.length,
+          musicXmlStaffCount: declaredStaffCount,
+          mscxMeasureCounts: Array.from(sourceMeasureCounts),
+          mscxStaffCount: partStaffNotations.length,
+          partIndex,
+        }
+      )
+      return
+    }
+
+    const originalChanges = getOriginalKeyChanges(
+      measures,
+      partStaffNotations.length
+    )
+    const sourceChangesByMeasure = new Map<number, Map<number, number>>()
+    partStaffNotations.forEach(({ keySignatures, staffNumber }) => {
+      keySignatures.forEach(({ fifths, measureIndex }) => {
+        const changes = sourceChangesByMeasure.get(measureIndex) ?? new Map()
+        changes.set(staffNumber - 1, fifths)
+        sourceChangesByMeasure.set(measureIndex, changes)
+      })
+    })
+
+    const activeOriginalFifths = Array<number>(partStaffNotations.length).fill(
+      0
+    )
+    const activeSourceFifths = Array<number | null>(
+      partStaffNotations.length
+    ).fill(null)
+
+    measures.forEach((measure, measureIndex) => {
+      originalChanges[measureIndex]?.forEach((fifths, staffIndex) => {
+        if (fifths !== null) activeOriginalFifths[staffIndex] = fifths
+      })
+
+      const sourceChanges = sourceChangesByMeasure.get(measureIndex)
+      sourceChanges?.forEach((fifths, staffIndex) => {
+        activeSourceFifths[staffIndex] = fifths
+      })
+
+      if (sourceChanges) {
+        replaceMeasureKeys(
+          doc,
+          measure,
+          activeSourceFifths.map(
+            (fifths, staffIndex) =>
+              fifths ?? activeOriginalFifths[staffIndex] ?? 0
+          )
+        )
+      }
+
+      removeGeneratedKeyAccidentals({
+        activeOriginalFifths,
+        activeSourceFifths,
+        measure,
+        measureIndex,
+        staffNotations: partStaffNotations,
+      })
+    })
+  })
+
+  return new XMLSerializer().serializeToString(doc)
 }
 
 const addTremoloNotation = (noteXml: string, marks: number): string => {
@@ -645,7 +1022,7 @@ const restoreSwingDirections = (
 const restorePlaybackMetadataFromMscz = async (
   musicXml: string,
   fileBinary: Uint8Array
-): Promise<RestoreHarmonyResult> => {
+): Promise<RestorePlaybackMetadataResult> => {
   const mscx = await findMscxFile(fileBinary)
   if (!mscx) {
     return {
@@ -656,8 +1033,16 @@ const restorePlaybackMetadataFromMscz = async (
   const playbackData = parseMscxPlaybackData(mscx)
   if (!playbackData) return { musicXml }
 
-  const { harmonies, chordPlayback, swingMarkers } = playbackData
-  const musicXmlWithTremolos = restoreTremolos(musicXml, chordPlayback)
+  const { harmonies, chordPlayback, staffNotations, swingMarkers } =
+    playbackData
+  const musicXmlWithKeySignatures = restoreKeySignatures(
+    musicXml,
+    staffNotations
+  )
+  const musicXmlWithTremolos = restoreTremolos(
+    musicXmlWithKeySignatures,
+    chordPlayback
+  )
   if (!harmonies.length) {
     return {
       musicXml: restoreSwingDirections(musicXmlWithTremolos, swingMarkers),
@@ -685,6 +1070,39 @@ const restorePlaybackMetadataFromMscz = async (
   }
 }
 
+const replaceMxlScoreXml = async (
+  musicMxl: Uint8Array,
+  musicXml: string
+): Promise<Uint8Array> => {
+  const JSZip = (await import('jszip')).default
+  const zip = await JSZip.loadAsync(musicMxl)
+  const containerEntry = zip.file('META-INF/container.xml')
+  const containerXml = containerEntry
+    ? await containerEntry.async('string')
+    : null
+  const containerDoc = containerXml
+    ? new DOMParser().parseFromString(containerXml, 'application/xml')
+    : null
+  const rootFilePath = containerDoc
+    ?.querySelector('rootfile')
+    ?.getAttribute('full-path')
+  const scoreEntry = rootFilePath
+    ? zip.file(rootFilePath)
+    : Object.values(zip.files).find(
+        (entry) =>
+          !entry.dir &&
+          !entry.name.startsWith('META-INF/') &&
+          /\.(musicxml|xml)$/i.test(entry.name)
+      )
+
+  if (!scoreEntry) {
+    throw new Error('MXL内のMusicXMLを特定できませんでした')
+  }
+
+  zip.file(scoreEntry.name, musicXml)
+  return zip.generateAsync({ compression: 'DEFLATE', type: 'uint8array' })
+}
+
 export const convertMsczToMusicXml = async (
   fileBinary: Uint8Array
 ): Promise<MusicScoreExport> => {
@@ -704,9 +1122,13 @@ export const convertMsczToMusicXml = async (
 
   let musicMxl: Uint8Array | null = null
   try {
-    musicMxl = await score.saveMxl()
-  } catch {
-    logger.warn('MXLの生成に失敗しましたが、XMLは生成されました')
+    const rawMusicMxl = await score.saveMxl()
+    musicMxl = await replaceMxlScoreXml(rawMusicMxl, musicXml)
+  } catch (error) {
+    logger.warn(
+      'MXLの生成または補正に失敗しましたが、XMLは生成されました',
+      error
+    )
   }
 
   return { musicXml, musicMxl }
