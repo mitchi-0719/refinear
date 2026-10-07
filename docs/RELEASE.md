@@ -26,7 +26,26 @@ GitタグをRefinearの正式なバージョン情報とし、[Semantic Versioni
 
 ## リリースPRを作成する
 
-[リリースPRを作成](https://github.com/mitchi-0719/refinear/compare/main...develop?expand=1&template=release.md)し、次を設定する。
+GitHub CLIでリポジトリへアクセスできる状態にして、リポジトリルートから次を実行する。
+
+```bash
+npm run release:pr -- vX.Y.Z
+```
+
+このコマンドは`origin/main`と`origin/develop`、タグを取得し、次を確認してから`develop`から`main`へのリリースPRを作成する。
+
+- 指定バージョンが`vX.Y.Z`形式である
+- 同名タグが存在しない
+- 同じheadとbaseのopenなPRが存在しない
+- `main`と`develop`にリリース対象の差分がある
+
+PR本文にはリリースPRテンプレートと、`main`以降に`develop`へマージされたPRの一覧を使用する。作成せずにタイトルと本文だけを確認する場合は、次を実行する。
+
+```bash
+npm run release:pr -- vX.Y.Z --dry-run
+```
+
+コマンドを利用できない場合は、[GitHubの比較画面](https://github.com/mitchi-0719/refinear/compare/main...develop?expand=1&template=release.md)から手動で作成する。
 
 - base: `main`
 - compare: `develop`
