@@ -17,10 +17,10 @@ describe('showSnackbar', () => {
     vi.clearAllMocks()
   })
 
-  it('既定値ではinfo通知を6秒間表示する', () => {
+  it('既定値ではinfo通知を3秒間表示する', () => {
     showSnackbar({ message: 'お知らせ' })
 
-    expect(toast.info).toHaveBeenCalledWith('お知らせ', { duration: 6000 })
+    expect(toast.info).toHaveBeenCalledWith('お知らせ', { duration: 3000 })
   })
 
   it('指定した種類と表示時間で通知する', () => {

@@ -8,7 +8,7 @@ type ShowSnackbarInput = {
   duration?: number
 }
 
-const DEFAULT_DURATION = 6000
+const DEFAULT_DURATION = 3000
 
 export const showSnackbar = ({
   message,
