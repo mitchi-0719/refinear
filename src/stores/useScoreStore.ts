@@ -1,5 +1,7 @@
 import { create } from 'zustand'
 
+import type { AppErrorInfo } from '../lib/appError'
+
 export interface ScoreState {
   // ファイル情報
   fileName: string | null
@@ -7,7 +9,7 @@ export interface ScoreState {
 
   // 解析状態
   isLoading: boolean
-  error: string | null
+  error: AppErrorInfo | null
 
   // 結果
   musicXml: string | null
@@ -35,7 +37,7 @@ export interface ScoreState {
   setMusicXml: (xml: string) => void
   setMusicMxl: (mxl: Uint8Array | null) => void
   setLoading: (isLoading: boolean) => void
-  setError: (error: string | null) => void
+  setError: (error: AppErrorInfo | null) => void
   setTotalDuration: (duration: number) => void
   reset: () => void
 
