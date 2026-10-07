@@ -27,7 +27,7 @@ import {
 import { showSnackbar } from '../lib/snackbar'
 import { useScoreStore } from '../stores/useScoreStore'
 import { Alert, AlertDescription, AlertTitle } from './ui/Alert'
-import { ErrorCode } from './ui/ErrorCode'
+import { ErrorDetails } from './ui/ErrorDetails'
 import { Icon } from './ui/Icon'
 
 const formatOpenedAt = (timestamp: number) =>
@@ -68,10 +68,6 @@ const getUploadErrorContent = (error: AppErrorInfo) => {
   }
 }
 
-const logAppError = (context: string, error: AppErrorInfo, cause?: unknown) => {
-  logger.error(`[${error.code}] ${context}:`, cause ?? error.message)
-}
-
 export const FileUploader = () => {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -107,9 +103,10 @@ export const FileUploader = () => {
     } catch (err) {
       const historyLoadError = createAppError(
         APP_ERROR_CODES.historyLoadFailed,
-        getErrorMessage(err, '履歴を読み込めませんでした')
+        getErrorMessage(err, '履歴を読み込めませんでした'),
+        { context: '履歴の読み込み', cause: err }
       )
-      logAppError('履歴読み込みエラー', historyLoadError, err)
+      logger.appError(historyLoadError, err)
       setHistoryError(historyLoadError)
     } finally {
       setIsHistoryLoading(false)
@@ -128,9 +125,10 @@ export const FileUploader = () => {
         if (cancelled) return
         const historyLoadError = createAppError(
           APP_ERROR_CODES.historyLoadFailed,
-          getErrorMessage(err, '履歴を読み込めませんでした')
+          getErrorMessage(err, '履歴を読み込めませんでした'),
+          { context: '履歴の読み込み', cause: err }
         )
-        logAppError('履歴読み込みエラー', historyLoadError, err)
+        logger.appError(historyLoadError, err)
         setHistoryError(historyLoadError)
       })
       .finally(() => {
@@ -158,9 +156,10 @@ export const FileUploader = () => {
         if (!isValid) {
           const uploadError = createAppError(
             APP_ERROR_CODES.unsupportedFileFormat,
-            '対応していないファイル形式です。MSCZ ファイルをお選びください。'
+            '対応していないファイル形式です。MSCZ ファイルをお選びください。',
+            { context: 'ファイル形式の検証' }
           )
-          logAppError('ファイル形式エラー', uploadError)
+          logger.appError(uploadError)
           setError(uploadError)
           return
         }
@@ -170,9 +169,10 @@ export const FileUploader = () => {
         if (file.size > maxSize) {
           const uploadError = createAppError(
             APP_ERROR_CODES.fileTooLarge,
-            'ファイルサイズが大きすぎます。100 MB 以下のファイルをお選びください。'
+            'ファイルサイズが大きすぎます。100 MB 以下のファイルをお選びください。',
+            { context: 'ファイルサイズの検証' }
           )
-          logAppError('ファイルサイズエラー', uploadError)
+          logger.appError(uploadError)
           setError(uploadError)
           return
         }
@@ -217,18 +217,20 @@ export const FileUploader = () => {
           } catch (historySaveError) {
             const storageError = createAppError(
               APP_ERROR_CODES.historySaveFailed,
-              '楽譜は開けましたが、この端末に履歴を保存できませんでした。'
+              '楽譜は開けましたが、この端末に履歴を保存できませんでした。',
+              { context: '履歴の保存', cause: historySaveError }
             )
-            logAppError('履歴保存エラー', storageError, historySaveError)
+            logger.appError(storageError, historySaveError)
             setStorageWarning(storageError)
           }
         }
       } catch (err) {
         const uploadError = createAppError(
           failureCode,
-          getErrorMessage(err, '不明なエラーが発生しました')
+          getErrorMessage(err, '不明なエラーが発生しました'),
+          { context: 'ファイルの読み込み・変換', cause: err }
         )
-        logAppError('ファイル処理エラー', uploadError, err)
+        logger.appError(uploadError, err)
         setError(uploadError)
         setLoading(false)
       }
@@ -292,17 +294,19 @@ export const FileUploader = () => {
         } catch (touchError) {
           const storageError = createAppError(
             APP_ERROR_CODES.historyUpdateFailed,
-            '楽譜は開けましたが、履歴の最終利用日時を更新できませんでした。'
+            '楽譜は開けましたが、履歴の最終利用日時を更新できませんでした。',
+            { context: '履歴の最終利用日時の更新', cause: touchError }
           )
-          logAppError('履歴更新エラー', storageError, touchError)
+          logger.appError(storageError, touchError)
           setStorageWarning(storageError)
         }
       } catch (err) {
         const historyRestoreError = createAppError(
           APP_ERROR_CODES.historyRestoreFailed,
-          getErrorMessage(err, '履歴を読み込めませんでした')
+          getErrorMessage(err, '履歴を読み込めませんでした'),
+          { context: '履歴からの楽譜復元', cause: err }
         )
-        logAppError('履歴復元エラー', historyRestoreError, err)
+        logger.appError(historyRestoreError, err)
         setHistoryError(historyRestoreError)
         setLoading(false)
       } finally {
@@ -326,9 +330,10 @@ export const FileUploader = () => {
       } catch (err) {
         const historyDeleteError = createAppError(
           APP_ERROR_CODES.historyDeleteFailed,
-          getErrorMessage(err, '履歴を削除できませんでした')
+          getErrorMessage(err, '履歴を削除できませんでした'),
+          { context: '履歴の削除', cause: err }
         )
-        logAppError('履歴削除エラー', historyDeleteError, err)
+        logger.appError(historyDeleteError, err)
         setHistoryError(historyDeleteError)
       } finally {
         setDeletingId(null)
@@ -401,9 +406,10 @@ export const FileUploader = () => {
     } catch (err) {
       const demoError = createAppError(
         APP_ERROR_CODES.demoFetchFailed,
-        getErrorMessage(err, '不明なエラーが発生しました')
+        getErrorMessage(err, '不明なエラーが発生しました'),
+        { context: 'デモ楽譜の取得・読み込み', cause: err }
       )
-      logAppError('demo.mscz 処理エラー', demoError, err)
+      logger.appError(demoError, err)
       setError(demoError)
     }
   }, [processFile, setError])
@@ -484,7 +490,7 @@ export const FileUploader = () => {
                   <AlertDescription>
                     {uploadErrorContent.description}
                   </AlertDescription>
-                  <ErrorCode code={error.code} />
+                  <ErrorDetails error={error} />
                 </Alert>
               )}
               <p className="text-sm text-slate-500">対応形式 .mscz</p>
@@ -533,7 +539,7 @@ export const FileUploader = () => {
               <Alert variant="error">
                 <AlertTitle>履歴を読み込めませんでした</AlertTitle>
                 <AlertDescription>{historyError.message}</AlertDescription>
-                <ErrorCode code={historyError.code} />
+                <ErrorDetails error={historyError} />
               </Alert>
             ) : history.length === 0 ? (
               <p className="rounded-xl border border-slate-100 bg-white px-4 py-4 text-sm text-slate-400">
@@ -584,7 +590,7 @@ export const FileUploader = () => {
         <Alert variant="info">
           <AlertTitle>履歴を保存できませんでした</AlertTitle>
           <AlertDescription>{storageWarning.message}</AlertDescription>
-          <ErrorCode code={storageWarning.code} />
+          <ErrorDetails error={storageWarning} />
         </Alert>
       )}
 

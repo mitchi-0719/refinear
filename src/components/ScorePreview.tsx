@@ -29,7 +29,7 @@ import type {
   ScoreVisibilityControls,
 } from './controlModal/MixerPanel'
 import { Alert, AlertDescription, AlertTitle } from './ui/Alert'
-import { ErrorCode } from './ui/ErrorCode'
+import { ErrorDetails } from './ui/ErrorDetails'
 
 const MIN_CURSOR_WIDTH_PX = 4
 const SCORE_ZOOM_STEP_PERCENTAGE = 15
@@ -232,12 +232,10 @@ export const ScorePreview = () => {
           } catch (error) {
             const partVisibilityError = createAppError(
               APP_ERROR_CODES.partVisibilityFailed,
-              'パート表示を変更できませんでした'
+              'パート表示を変更できませんでした',
+              { context: 'パート表示の再描画', cause: error }
             )
-            logger.error(
-              `[${partVisibilityError.code}] [ScorePreview] Part visibility render failed:`,
-              error
-            )
+            logger.appError(partVisibilityError, error)
             osmd.Sheet.Instruments.forEach((instrument) => {
               instrument.Visible = !previousHiddenPartIds.has(
                 instrument.IdString
@@ -583,7 +581,7 @@ export const ScorePreview = () => {
         <Alert variant="error">
           <AlertTitle>エラー</AlertTitle>
           <AlertDescription>{renderError.message}</AlertDescription>
-          <ErrorCode code={renderError.code} />
+          <ErrorDetails error={renderError} />
         </Alert>
       ) : (
         <div className="relative overflow-x-auto rounded-lg bg-white">
@@ -612,7 +610,7 @@ export const ScorePreview = () => {
             <Alert variant="error">
               <AlertTitle>エラー</AlertTitle>
               <AlertDescription>{visibilityError.message}</AlertDescription>
-              <ErrorCode code={visibilityError.code} />
+              <ErrorDetails error={visibilityError} />
             </Alert>
           )}
           {(isRendering || isZoomRendering || isPartVisibilityRendering) && (

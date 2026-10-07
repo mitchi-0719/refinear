@@ -201,9 +201,10 @@ export const useOSMD = (
         if (!isCancelled) {
           const scoreRenderError = createAppError(
             APP_ERROR_CODES.scoreRenderFailed,
-            '楽譜の描画中にエラーが発生しました'
+            '楽譜の描画中にエラーが発生しました',
+            { context: '楽譜の描画', cause: err }
           )
-          logger.error(`[${scoreRenderError.code}] OSMD Render Error:`, err)
+          logger.appError(scoreRenderError, err)
           isLoadedRef.current = false
           osmdRef.current?.clear()
           osmdRef.current = null
