@@ -23,6 +23,13 @@ export type CachedScore = {
 
 export type ScoreHistoryItem = Omit<CachedScore, 'musicXml' | 'musicMxl'>
 
+export type CachedScoreCompatibility = 'current' | 'legacy' | 'incompatible'
+
+type CachedScoreMetadata = {
+  cacheVersion: unknown
+  converterVersion: unknown
+}
+
 const requestToPromise = <T>(request: IDBRequest<T>): Promise<T> =>
   new Promise((resolve, reject) => {
     request.onsuccess = () => resolve(request.result)
@@ -86,11 +93,21 @@ export const createScoreId = async (binary: Uint8Array): Promise<string> => {
   ).join('')
 }
 
-export const isCompatibleCachedScore = (
-  score: Pick<CachedScore, 'cacheVersion' | 'converterVersion'>
-): boolean =>
-  score.cacheVersion === SCORE_CACHE_VERSION &&
-  score.converterVersion === SCORE_CONVERTER_VERSION
+export const getCachedScoreCompatibility = (
+  score: CachedScoreMetadata
+): CachedScoreCompatibility => {
+  if (
+    score.cacheVersion !== SCORE_CACHE_VERSION ||
+    typeof score.converterVersion !== 'string' ||
+    score.converterVersion.length === 0
+  ) {
+    return 'incompatible'
+  }
+
+  return score.converterVersion === SCORE_CONVERTER_VERSION
+    ? 'current'
+    : 'legacy'
+}
 
 export const listRecentScores = async (): Promise<ScoreHistoryItem[]> => {
   const database = await openDatabase()

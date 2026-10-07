@@ -12,12 +12,13 @@ import {
   createScoreId,
   deleteCachedScore,
   getCachedScore,
-  isCompatibleCachedScore,
+  getCachedScoreCompatibility,
   listRecentScores,
   saveCachedScore,
   touchCachedScore,
 } from '../lib/scoreHistory'
 import { useScoreStore } from '../stores/useScoreStore'
+import { useSnackbarStore } from '../stores/useSnackbarStore'
 import { Alert, AlertDescription, AlertTitle } from './ui/Alert'
 import { Icon } from './ui/Icon'
 
@@ -78,6 +79,7 @@ export const FileUploader = () => {
   const setConvertedScore = useScoreStore((s) => s.setConvertedScore)
   const setLoading = useScoreStore((s) => s.setLoading)
   const setError = useScoreStore((s) => s.setError)
+  const showSnackbar = useSnackbarStore((s) => s.showSnackbar)
   const error = useScoreStore((s) => s.error)
   const isLoading = useScoreStore((s) => s.isLoading)
   const fileName = useScoreStore((s) => s.fileName)
@@ -215,7 +217,7 @@ export const FileUploader = () => {
       setLoading(true)
 
       try {
-        if (!isCompatibleCachedScore(item)) {
+        if (getCachedScoreCompatibility(item) === 'incompatible') {
           await deleteCachedScore(item.id)
           await refreshHistory()
           throw new Error(
@@ -224,9 +226,12 @@ export const FileUploader = () => {
         }
 
         const cachedScore = await getCachedScore(item.id)
+        const compatibility = cachedScore
+          ? getCachedScoreCompatibility(cachedScore)
+          : 'incompatible'
         if (
           !cachedScore ||
-          !isCompatibleCachedScore(cachedScore) ||
+          compatibility === 'incompatible' ||
           typeof cachedScore.musicXml !== 'string' ||
           cachedScore.musicXml.length === 0
         ) {
@@ -235,6 +240,14 @@ export const FileUploader = () => {
           throw new Error(
             '履歴データを読み込めません。MSCZファイルを再度選択してください。'
           )
+        }
+
+        if (compatibility === 'legacy') {
+          showSnackbar({
+            message:
+              'ファイル情報が古いです。正確に表示するには元ファイルを再選択してください',
+            variant: 'warning',
+          })
         }
 
         setConvertedScore({
@@ -262,7 +275,14 @@ export const FileUploader = () => {
         setRestoringId(null)
       }
     },
-    [isHistoryBusy, isLoading, refreshHistory, setConvertedScore, setLoading]
+    [
+      isHistoryBusy,
+      isLoading,
+      refreshHistory,
+      setConvertedScore,
+      setLoading,
+      showSnackbar,
+    ]
   )
 
   const removeFromHistory = useCallback(
