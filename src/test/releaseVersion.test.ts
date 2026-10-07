@@ -1,34 +1,40 @@
-import assert from 'node:assert/strict'
-import { describe, it } from 'node:test'
+import { describe, expect, it, vi } from 'vitest'
 
 import {
   isPrereleaseVersion,
   parseReleaseVersion,
   publishRelease,
   shouldPublishRelease,
-} from './releaseVersion.mjs'
+} from '../../scripts/releaseVersion.mjs'
 
-const createResponse = (status, body) =>
+const createResponse = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), {
     headers: { 'Content-Type': 'application/json' },
     status,
   })
 
-const withMockFetch = async (responses, callback) => {
-  const originalFetch = globalThis.fetch
-  const requests = []
+type FetchRequest = {
+  options: RequestInit
+  url: RequestInfo | URL
+}
 
-  globalThis.fetch = async (url, options = {}) => {
+const withMockFetch = async (
+  responses: Response[],
+  callback: (requests: FetchRequest[]) => Promise<void>
+) => {
+  const requests: FetchRequest[] = []
+
+  vi.stubGlobal('fetch', async (url: RequestInfo | URL, options = {}) => {
     requests.push({ options, url })
     const response = responses.shift()
-    assert.ok(response, `未定義のリクエストです: ${url}`)
+    if (!response) throw new Error(`未定義のリクエストです: ${url}`)
     return response
-  }
+  })
 
   try {
     await callback(requests)
   } finally {
-    globalThis.fetch = originalFetch
+    vi.unstubAllGlobals()
   }
 }
 
@@ -43,17 +49,16 @@ const releaseInput = {
 
 describe('parseReleaseVersion', () => {
   it('安定版のリリースタイトルからバージョンを取得する', () => {
-    assert.equal(parseReleaseVersion('release: v0.2.0'), 'v0.2.0')
-    assert.equal(parseReleaseVersion('release: v1.0.0'), 'v1.0.0')
+    expect(parseReleaseVersion('release: v0.2.0')).toBe('v0.2.0')
+    expect(parseReleaseVersion('release: v1.0.0')).toBe('v1.0.0')
   })
 
   it('プレリリースとビルドメタデータを受け入れる', () => {
-    assert.equal(
-      parseReleaseVersion('release: v1.2.3-rc.1+build.5'),
+    expect(parseReleaseVersion('release: v1.2.3-rc.1+build.5')).toBe(
       'v1.2.3-rc.1+build.5'
     )
-    assert.equal(parseReleaseVersion('release: v1.2.3-0'), 'v1.2.3-0')
-    assert.equal(parseReleaseVersion('release: v1.2.3-rc.01a'), 'v1.2.3-rc.01a')
+    expect(parseReleaseVersion('release: v1.2.3-0')).toBe('v1.2.3-0')
+    expect(parseReleaseVersion('release: v1.2.3-rc.01a')).toBe('v1.2.3-rc.01a')
   })
 
   it('不正なタイトルを拒否する', () => {
@@ -66,23 +71,20 @@ describe('parseReleaseVersion', () => {
       'release: v1.2',
       'release: v1.2.3 ',
     ]) {
-      assert.throws(() => parseReleaseVersion(title))
+      expect(() => parseReleaseVersion(title)).toThrow()
     }
   })
 })
 
 describe('shouldPublishRelease', () => {
   it('developからmainへマージされた場合だけ公開する', () => {
-    assert.equal(
-      shouldPublishRelease({ headRef: 'develop', merged: 'true' }),
+    expect(shouldPublishRelease({ headRef: 'develop', merged: 'true' })).toBe(
       true
     )
-    assert.equal(
-      shouldPublishRelease({ headRef: 'feature/161', merged: 'true' }),
-      false
-    )
-    assert.equal(
-      shouldPublishRelease({ headRef: 'develop', merged: 'false' }),
+    expect(
+      shouldPublishRelease({ headRef: 'feature/161', merged: 'true' })
+    ).toBe(false)
+    expect(shouldPublishRelease({ headRef: 'develop', merged: 'false' })).toBe(
       false
     )
   })
@@ -90,10 +92,10 @@ describe('shouldPublishRelease', () => {
 
 describe('isPrereleaseVersion', () => {
   it('プレリリース識別子の有無を判定する', () => {
-    assert.equal(isPrereleaseVersion('v1.0.0'), false)
-    assert.equal(isPrereleaseVersion('v1.0.0-rc.1'), true)
-    assert.equal(isPrereleaseVersion('v1.0.0+build-5'), false)
-    assert.equal(isPrereleaseVersion('v1.0.0-rc.1+build-5'), true)
+    expect(isPrereleaseVersion('v1.0.0')).toBe(false)
+    expect(isPrereleaseVersion('v1.0.0-rc.1')).toBe(true)
+    expect(isPrereleaseVersion('v1.0.0+build-5')).toBe(false)
+    expect(isPrereleaseVersion('v1.0.0-rc.1+build-5')).toBe(true)
   })
 })
 
@@ -109,14 +111,14 @@ describe('publishRelease', () => {
       async (requests) => {
         const result = await publishRelease(releaseInput)
 
-        assert.deepEqual(result, {
+        expect(result).toEqual({
           created: true,
           url: 'https://example.com/v0.2.0',
           version: 'v0.2.0',
         })
-        assert.equal(requests.length, 4)
-        assert.equal(requests[2].options.method, 'POST')
-        assert.equal(requests[3].options.method, 'POST')
+        expect(requests).toHaveLength(4)
+        expect(requests[2].options.method).toBe('POST')
+        expect(requests[3].options.method).toBe('POST')
       }
     )
   })
@@ -132,12 +134,12 @@ describe('publishRelease', () => {
       async (requests) => {
         const result = await publishRelease(releaseInput)
 
-        assert.deepEqual(result, {
+        expect(result).toEqual({
           created: false,
           url: 'https://example.com/v0.2.0',
           version: 'v0.2.0',
         })
-        assert.equal(requests.length, 2)
+        expect(requests).toHaveLength(2)
       }
     )
   })
@@ -154,9 +156,9 @@ describe('publishRelease', () => {
       async (requests) => {
         const result = await publishRelease(releaseInput)
 
-        assert.equal(result.created, true)
-        assert.equal(requests.length, 3)
-        assert.match(requests[2].url, /\/releases$/)
+        expect(result.created).toBe(true)
+        expect(requests).toHaveLength(3)
+        expect(String(requests[2].url)).toMatch(/\/releases$/)
       }
     )
   })
@@ -169,11 +171,10 @@ describe('publishRelease', () => {
         }),
       ],
       async (requests) => {
-        await assert.rejects(
-          () => publishRelease(releaseInput),
+        await expect(publishRelease(releaseInput)).rejects.toThrow(
           /タグは別のコミットに存在します/
         )
-        assert.equal(requests.length, 1)
+        expect(requests).toHaveLength(1)
       }
     )
   })
@@ -192,9 +193,9 @@ describe('publishRelease', () => {
       async (requests) => {
         const result = await publishRelease(releaseInput)
 
-        assert.equal(result.created, false)
-        assert.equal(requests.length, 3)
-        assert.match(requests[1].url, /\/git\/tags\/tag-object-sha$/)
+        expect(result.created).toBe(false)
+        expect(requests).toHaveLength(3)
+        expect(String(requests[1].url)).toMatch(/\/git\/tags\/tag-object-sha$/)
       }
     )
   })
@@ -210,11 +211,10 @@ describe('publishRelease', () => {
         }),
       ],
       async (requests) => {
-        await assert.rejects(
-          () => publishRelease(releaseInput),
+        await expect(publishRelease(releaseInput)).rejects.toThrow(
           /タグは別のコミットに存在します/
         )
-        assert.equal(requests.length, 2)
+        expect(requests).toHaveLength(2)
       }
     )
   })
