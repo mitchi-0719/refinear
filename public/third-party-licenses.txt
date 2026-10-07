@@ -59,7 +59,7 @@ IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 ================================================================================
 
-@jridgewell/sourcemap-codec@1.5.5
+@jridgewell/sourcemap-codec@1.6.0
 License: MIT
 
 --- LICENSE ---
@@ -3809,7 +3809,7 @@ THE SOFTWARE.
 
 ================================================================================
 
-picomatch@4.0.4
+picomatch@4.0.7
 License: MIT
 
 --- LICENSE ---
@@ -5603,7 +5603,7 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ================================================================================
 
-tinyglobby@0.2.16
+tinyglobby@0.2.17
 License: MIT
 
 --- LICENSE ---

@@ -1,12 +1,11 @@
-import assert from 'node:assert/strict'
-import { describe, it } from 'node:test'
+import { describe, expect, it } from 'vitest'
 
 import {
   buildReleasePrBody,
   createReleasePr,
   normalizeReleaseVersion,
   parseReleaseChanges,
-} from './createReleasePr.mjs'
+} from '../../scripts/createReleasePr.mjs'
 
 const template = `## 🚀 リリース
 
@@ -40,13 +39,28 @@ const releaseLog = [
   ['2222222222222222222222222222222222222222', '直接コミット', ''].join('\x1f'),
 ].join('\x1e')
 
+type CommandCall = {
+  args: string[]
+  command: string
+}
+
+type ExistingPullRequest = {
+  number: number
+  title: string
+  url: string
+}
+
 const createCommandRunner = ({
   changedFiles = 'src/index.ts\n',
   existingPullRequests = [],
   existingTag = '',
+}: {
+  changedFiles?: string
+  existingPullRequests?: ExistingPullRequest[]
+  existingTag?: string
 } = {}) => {
-  const calls = []
-  const runCommand = async (command, args) => {
+  const calls: CommandCall[] = []
+  const runCommand = async (command: string, args: string[]) => {
     calls.push({ args, command })
     const commandLine = `${command} ${args.join(' ')}`
 
@@ -70,19 +84,19 @@ const createCommandRunner = ({
 
 describe('normalizeReleaseVersion', () => {
   it('vX.Y.Z形式のバージョンを受け入れる', () => {
-    assert.equal(normalizeReleaseVersion('v0.2.0'), 'v0.2.0')
-    assert.equal(normalizeReleaseVersion(' v1.0.0-rc.1 '), 'v1.0.0-rc.1')
+    expect(normalizeReleaseVersion('v0.2.0')).toBe('v0.2.0')
+    expect(normalizeReleaseVersion(' v1.0.0-rc.1 ')).toBe('v1.0.0-rc.1')
   })
 
   it('不正なバージョンを拒否する', () => {
-    assert.throws(() => normalizeReleaseVersion('0.2.0'))
-    assert.throws(() => normalizeReleaseVersion('v1.2'))
+    expect(() => normalizeReleaseVersion('0.2.0')).toThrow()
+    expect(() => normalizeReleaseVersion('v1.2')).toThrow()
   })
 })
 
 describe('parseReleaseChanges', () => {
   it('マージPRと直接コミットを変更一覧に変換する', () => {
-    assert.deepEqual(parseReleaseChanges(releaseLog), [
+    expect(parseReleaseChanges(releaseLog)).toEqual([
       '- #10 refs #10 楽譜表示を改善',
       '- `2222222` 直接コミット',
     ])
@@ -97,10 +111,10 @@ describe('buildReleasePrBody', () => {
       version: 'v0.2.0',
     })
 
-    assert.match(body, /リリースバージョン: `v0\.2\.0`/)
-    assert.match(body, /### 変更内容\n\n- #10 楽譜表示を改善/)
-    assert.match(body, /### 今回含めない変更\n\nなし/)
-    assert.doesNotMatch(body, /変更内容 -->/)
+    expect(body).toMatch(/リリースバージョン: `v0\.2\.0`/)
+    expect(body).toMatch(/### 変更内容\n\n- #10 楽譜表示を改善/)
+    expect(body).toMatch(/### 今回含めない変更\n\nなし/)
+    expect(body).not.toMatch(/変更内容 -->/)
   })
 })
 
@@ -114,14 +128,13 @@ describe('createReleasePr', () => {
       version: 'v0.2.0',
     })
 
-    assert.equal(result.created, false)
-    assert.equal(result.title, 'release: v0.2.0')
-    assert.equal(
+    expect(result.created).toBe(false)
+    expect(result.title).toBe('release: v0.2.0')
+    expect(
       calls.some(
         ({ args, command }) => command === 'gh' && args[1] === 'create'
-      ),
-      false
-    )
+      )
+    ).toBe(false)
   })
 
   it('リリースPRをdevelopからmainへ作成する', async () => {
@@ -132,28 +145,26 @@ describe('createReleasePr', () => {
       version: 'v0.2.0',
     })
 
-    assert.equal(result.created, true)
-    assert.equal(result.url, 'https://github.com/example/refinear/pull/20')
+    expect(result.created).toBe(true)
+    expect(result.url).toBe('https://github.com/example/refinear/pull/20')
     const createCall = calls.find(
       ({ args, command }) => command === 'gh' && args[1] === 'create'
     )
-    assert.ok(createCall)
-    assert.ok(createCall.args.includes('main'))
-    assert.ok(createCall.args.includes('develop'))
+    expect(createCall).toBeDefined()
+    expect(createCall?.args).toContain('main')
+    expect(createCall?.args).toContain('develop')
   })
 
   it('同名タグがある場合はPRを作成しない', async () => {
     const { runCommand } = createCommandRunner({ existingTag: 'v0.2.0\n' })
 
-    await assert.rejects(
-      () =>
-        createReleasePr({
-          runCommand,
-          template,
-          version: 'v0.2.0',
-        }),
-      /タグは既に存在します/
-    )
+    await expect(
+      createReleasePr({
+        runCommand,
+        template,
+        version: 'v0.2.0',
+      })
+    ).rejects.toThrow(/タグは既に存在します/)
   })
 
   it('developからmainへのPRがある場合は重複作成しない', async () => {
@@ -167,28 +178,24 @@ describe('createReleasePr', () => {
       ],
     })
 
-    await assert.rejects(
-      () =>
-        createReleasePr({
-          runCommand,
-          template,
-          version: 'v0.2.0',
-        }),
-      /PRが既に存在します/
-    )
+    await expect(
+      createReleasePr({
+        runCommand,
+        template,
+        version: 'v0.2.0',
+      })
+    ).rejects.toThrow(/PRが既に存在します/)
   })
 
   it('mainとdevelopに差分がない場合はPRを作成しない', async () => {
     const { runCommand } = createCommandRunner({ changedFiles: '' })
 
-    await assert.rejects(
-      () =>
-        createReleasePr({
-          runCommand,
-          template,
-          version: 'v0.2.0',
-        }),
-      /リリース対象の差分がありません/
-    )
+    await expect(
+      createReleasePr({
+        runCommand,
+        template,
+        version: 'v0.2.0',
+      })
+    ).rejects.toThrow(/リリース対象の差分がありません/)
   })
 })

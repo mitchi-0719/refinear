@@ -19,12 +19,7 @@
     "preview": "vite preview",
     "preview:cloudflare": "npm run build && wrangler dev",
     "release:pr": "node scripts/createReleasePr.mjs",
-    "test:grace": "node --test scripts/graceNotePlayback.test.mjs",
-    "test:key-signature": "node --test scripts/keySignature.test.mjs",
-    "test:osmd-compatibility": "node --test scripts/osmdCompatibility.test.mjs",
-    "test:release": "node --test scripts/releaseVersion.test.mjs scripts/createReleasePr.test.mjs",
-    "test:release-pr": "node --test scripts/createReleasePr.test.mjs",
-    "test:swing": "node --test scripts/swingPlayback.test.mjs"
+    "test": "vitest run"
   },
   "dependencies": {
     "jszip": "^3.10.1",
@@ -66,6 +61,7 @@
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.59.2",
     "vite": "^8.0.12",
+    "vitest": "^5.0.3",
     "wrangler": "^4.123.0"
   }
 }
