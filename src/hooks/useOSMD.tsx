@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { OpenSheetMusicDisplay } from 'opensheetmusicdisplay'
 
 import { logger } from '../lib/logger'
+import { isOsmdGlissandoLayoutError } from '../lib/osmdCompatibility'
 import { waitFrame } from '../lib/waitFrame'
 
 // 楽譜を初回表示する際の拡大率。必要に応じてここを調整する。
@@ -108,14 +109,28 @@ export const useOSMD = (
             })
           )
         }
+        const loadScore = async (
+          osmd: OpenSheetMusicDisplay,
+          source: 'xml' | 'mxl'
+        ) => {
+          if (source === 'xml') {
+            if (!musicXml) throw new Error('MusicXML data is not available')
+            await osmd.load(musicXml)
+            return
+          }
+
+          await loadMxl(osmd)
+        }
 
         let osmd = createOsmd()
+        let loadedSource: 'xml' | 'mxl'
         osmdRef.current = osmd
         isLoadedRef.current = false
 
         if (musicXml) {
           try {
             await osmd.load(musicXml)
+            loadedSource = 'xml'
           } catch (xmlError) {
             if (!musicMxl || isCancelled) throw xmlError
 
@@ -128,9 +143,11 @@ export const useOSMD = (
             osmd = createOsmd()
             osmdRef.current = osmd
             await loadMxl(osmd)
+            loadedSource = 'mxl'
           }
         } else if (musicMxl) {
           await loadMxl(osmd)
+          loadedSource = 'mxl'
         } else return
 
         if (isCancelled) {
@@ -138,16 +155,43 @@ export const useOSMD = (
           return
         }
 
+        const renderScore = () => {
+          // 描画準備中に変更された倍率も、初回描画に反映する。
+          osmd.zoom = zoomRef.current
+          osmd.render()
+        }
+
         isLoadedRef.current = true
 
-        // 描画準備中に変更された倍率も、初回描画に反映する。
-        osmd.zoom = zoomRef.current
+        try {
+          renderScore()
+        } catch (renderError) {
+          if (!isOsmdGlissandoLayoutError(renderError)) throw renderError
 
-        if (!isCancelled) {
-          osmd.render()
-          notifyRendered()
-          setIsRendering(false)
+          logger.warn(
+            '[useOSMD] Glissando layout failed; retrying without glissando lines',
+            renderError
+          )
+          isLoadedRef.current = false
+          osmd.clear()
+          container.innerHTML = ''
+
+          osmd = createOsmd()
+          osmdRef.current = osmd
+          osmd.EngravingRules.RenderGlissandi = false
+          await loadScore(osmd, loadedSource)
+
+          if (isCancelled) {
+            osmd.clear()
+            return
+          }
+
+          isLoadedRef.current = true
+          renderScore()
         }
+
+        notifyRendered()
+        setIsRendering(false)
       } catch (err) {
         if (!isCancelled) {
           logger.error('OSMD Render Error:', err)
