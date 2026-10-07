@@ -5,6 +5,11 @@ import { useShallow } from 'zustand/shallow'
 import { useAudioPlayer } from '../hooks/useAudioPlayer'
 import { useNoteInteraction } from '../hooks/useNoteInteraction'
 import { DEFAULT_SCORE_ZOOM, useOSMD } from '../hooks/useOSMD'
+import {
+  APP_ERROR_CODES,
+  type AppErrorInfo,
+  createAppError,
+} from '../lib/appError'
 import { logger } from '../lib/logger'
 import {
   type NoteEvent,
@@ -24,6 +29,7 @@ import type {
   ScoreVisibilityControls,
 } from './controlModal/MixerPanel'
 import { Alert, AlertDescription, AlertTitle } from './ui/Alert'
+import { ErrorDetails } from './ui/ErrorDetails'
 
 const MIN_CURSOR_WIDTH_PX = 4
 const SCORE_ZOOM_STEP_PERCENTAGE = 15
@@ -104,8 +110,8 @@ export const ScorePreview = () => {
   }>({ musicXml: null, hiddenPartIds: EMPTY_HIDDEN_PART_IDS })
   const [visibilityErrorState, setVisibilityErrorState] = useState<{
     musicXml: string | null
-    message: string | null
-  }>({ musicXml: null, message: null })
+    error: AppErrorInfo | null
+  }>({ musicXml: null, error: null })
   const { musicXml, musicMxl, isLoading } = useScoreStore(
     useShallow((state) => ({
       musicXml: state.musicXml,
@@ -133,7 +139,7 @@ export const ScorePreview = () => {
       : EMPTY_HIDDEN_PART_IDS
   const visibilityError =
     visibilityErrorState.musicXml === musicXml
-      ? visibilityErrorState.message
+      ? visibilityErrorState.error
       : null
 
   const getMeasureTop = useCallback(
@@ -205,7 +211,7 @@ export const ScorePreview = () => {
       const previousHiddenPartIds = hiddenPartIds
       const anchor = captureMeasureAnchor()
       setIsPartVisibilityRendering(true)
-      setVisibilityErrorState({ musicXml, message: null })
+      setVisibilityErrorState({ musicXml, error: null })
 
       // ローディング表示を先にブラウザへ描画してから、重いOSMD更新を行う。
       // 楽譜サイズ変更と同様に2フレーム待つことで、クリック直後に
@@ -224,7 +230,12 @@ export const ScorePreview = () => {
               hiddenPartIds: nextHiddenPartIds,
             })
           } catch (error) {
-            logger.error('[ScorePreview] Part visibility render failed:', error)
+            const partVisibilityError = createAppError(
+              APP_ERROR_CODES.partVisibilityFailed,
+              'パート表示を変更できませんでした',
+              { context: 'パート表示の再描画', cause: error }
+            )
+            logger.appError(partVisibilityError, error)
             osmd.Sheet.Instruments.forEach((instrument) => {
               instrument.Visible = !previousHiddenPartIds.has(
                 instrument.IdString
@@ -242,7 +253,7 @@ export const ScorePreview = () => {
             }
             setVisibilityErrorState({
               musicXml,
-              message: 'パート表示を変更できませんでした',
+              error: partVisibilityError,
             })
           }
 
@@ -569,7 +580,8 @@ export const ScorePreview = () => {
       {renderError ? (
         <Alert variant="error">
           <AlertTitle>エラー</AlertTitle>
-          <AlertDescription>{renderError}</AlertDescription>
+          <AlertDescription>{renderError.message}</AlertDescription>
+          <ErrorDetails error={renderError} />
         </Alert>
       ) : (
         <div className="relative overflow-x-auto rounded-lg bg-white">
@@ -597,7 +609,8 @@ export const ScorePreview = () => {
           {visibilityError && (
             <Alert variant="error">
               <AlertTitle>エラー</AlertTitle>
-              <AlertDescription>{visibilityError}</AlertDescription>
+              <AlertDescription>{visibilityError.message}</AlertDescription>
+              <ErrorDetails error={visibilityError} />
             </Alert>
           )}
           {(isRendering || isZoomRendering || isPartVisibilityRendering) && (
