@@ -17,8 +17,8 @@ import {
   saveCachedScore,
   touchCachedScore,
 } from '../lib/scoreHistory'
+import { showSnackbar } from '../lib/snackbar'
 import { useScoreStore } from '../stores/useScoreStore'
-import { useSnackbarStore } from '../stores/useSnackbarStore'
 import { Alert, AlertDescription, AlertTitle } from './ui/Alert'
 import { Icon } from './ui/Icon'
 
@@ -79,7 +79,6 @@ export const FileUploader = () => {
   const setConvertedScore = useScoreStore((s) => s.setConvertedScore)
   const setLoading = useScoreStore((s) => s.setLoading)
   const setError = useScoreStore((s) => s.setError)
-  const showSnackbar = useSnackbarStore((s) => s.showSnackbar)
   const error = useScoreStore((s) => s.error)
   const isLoading = useScoreStore((s) => s.isLoading)
   const fileName = useScoreStore((s) => s.fileName)
@@ -275,14 +274,7 @@ export const FileUploader = () => {
         setRestoringId(null)
       }
     },
-    [
-      isHistoryBusy,
-      isLoading,
-      refreshHistory,
-      setConvertedScore,
-      setLoading,
-      showSnackbar,
-    ]
+    [isHistoryBusy, isLoading, refreshHistory, setConvertedScore, setLoading]
   )
 
   const removeFromHistory = useCallback(

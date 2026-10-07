@@ -65,3 +65,21 @@ body {
   fill: #ff0000 !important;
   stroke: #ff0000 !important;
 }
+
+/* Sonnerの通知は左から入り、自動消去または閉じる操作で左へ戻す。 */
+body [data-sonner-toaster].refinear-snackbar [data-sonner-toast] {
+  --y: translateX(calc(-100vw - 100%));
+}
+
+body
+  [data-sonner-toaster].refinear-snackbar
+  [data-sonner-toast][data-mounted='true'] {
+  --y: translateX(0);
+}
+
+body
+  [data-sonner-toaster].refinear-snackbar
+  [data-sonner-toast][data-removed='true'][data-swipe-out='false'] {
+  --y: translateX(calc(-100vw - 100%));
+  opacity: 0;
+}
