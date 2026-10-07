@@ -1,5 +1,5 @@
 export const SCORE_CACHE_VERSION = 1 as const
-export const SCORE_CONVERTER_VERSION = 'webmscore-1.2.1-swing-1'
+export const SCORE_CONVERTER_VERSION = 'webmscore-1.2.1-swing-1-key-signature-1'
 
 // Keep the legacy name so existing users retain their locally stored scores.
 const DATABASE_NAME = 'musescore-player'
@@ -22,6 +22,13 @@ export type CachedScore = {
 }
 
 export type ScoreHistoryItem = Omit<CachedScore, 'musicXml' | 'musicMxl'>
+
+export type CachedScoreCompatibility = 'current' | 'legacy' | 'incompatible'
+
+type CachedScoreMetadata = {
+  cacheVersion: unknown
+  converterVersion: unknown
+}
 
 const requestToPromise = <T>(request: IDBRequest<T>): Promise<T> =>
   new Promise((resolve, reject) => {
@@ -86,11 +93,21 @@ export const createScoreId = async (binary: Uint8Array): Promise<string> => {
   ).join('')
 }
 
-export const isCompatibleCachedScore = (
-  score: Pick<CachedScore, 'cacheVersion' | 'converterVersion'>
-): boolean =>
-  score.cacheVersion === SCORE_CACHE_VERSION &&
-  score.converterVersion === SCORE_CONVERTER_VERSION
+export const getCachedScoreCompatibility = (
+  score: CachedScoreMetadata
+): CachedScoreCompatibility => {
+  if (
+    score.cacheVersion !== SCORE_CACHE_VERSION ||
+    typeof score.converterVersion !== 'string' ||
+    score.converterVersion.length === 0
+  ) {
+    return 'incompatible'
+  }
+
+  return score.converterVersion === SCORE_CONVERTER_VERSION
+    ? 'current'
+    : 'legacy'
+}
 
 export const listRecentScores = async (): Promise<ScoreHistoryItem[]> => {
   const database = await openDatabase()

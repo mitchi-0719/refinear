@@ -26,9 +26,10 @@ Issueの重複検索、原稿作成、既存Issueの再利用、起票は`../cre
 1. `git status --short --branch`、`git remote -v`、現在のブランチを確認する。
 2. `origin`から`develop`をfetchする。
 3. 現在のbranchが既に`feature/{issue番号}`なら、Issue、起点、履歴、作業ツリーを確認し、安全に継続できる場合はそのまま使用する。
-4. 現在のbranchとは別に`feature/{issue番号}`がローカル、origin、または別worktreeに存在する場合は作り直さず、履歴、PR、作業ツリーを調べ、安全な継続方法をユーザーに確認する。
-5. 存在しない場合は、最新の`origin/develop`を起点に`git switch -c "feature/{issue番号}" --no-track origin/develop`で作成してcheckoutする。
-6. ブランチ名と起点を確認する。この時点でもファイルは編集しない。
+4. 現在の作業ツリーがクリーンで、`feature/{issue番号}`がローカル・origin・別worktreeのいずれにも存在しない場合は、現在のディレクトリで最新の`origin/develop`を起点に`git switch -c "feature/{issue番号}" --no-track origin/develop`を実行する。一時worktreeを作成しない。
+5. `feature/{issue番号}`がローカルまたはoriginに存在し、別worktreeでcheckoutされていない場合は、履歴と作業ツリーを確認して安全なら現在のディレクトリでそのbranchへ切り替える。
+6. 現在の作業ツリーに無関係な変更があって切り替えられない場合、または対象branchが別worktreeでcheckout済みの場合だけ、変更を移動せず、専用worktreeを安全な一時ディレクトリへ作る前にユーザーへ確認する。
+7. ブランチ名と起点を確認する。この時点でもファイルは編集しない。
 
 ## 3. 実装計画を作り、承認を待つ
 

@@ -2,6 +2,7 @@ import {
   DRUM_SAMPLE_KEY_BY_LABEL,
   MIDI_UNPITCHED_TO_KEY,
 } from '../constants/drum'
+import { applyGraceNotePlaybackTiming } from './graceNotePlayback'
 import { logger } from './logger'
 import type { SwingChange, SwingUnit } from './swingPlayback'
 
@@ -1221,7 +1222,7 @@ export const parseMusicXmlForEvents = async (
     })
   })
 
-  const sortedEvents = events.sort(
+  const sortedEvents = applyGraceNotePlaybackTiming(events).sort(
     (left, right) =>
       left.time - right.time ||
       left.partId.localeCompare(right.partId) ||

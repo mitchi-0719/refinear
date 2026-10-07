@@ -205,13 +205,13 @@ TypeError: Cannot read properties of undefined (reading 'HasEndLine')
 
 このファイルの `webmscore` 変換結果は、8パート、640小節、約1.60MBの整形式MusicXMLであり、空譜問題ではなかった。MusicXMLには22個の `<slide>` 要素が含まれていた。
 
-OSMD 2.0.0の公式ソースを追跡した結果、`HasEndLine` 参照は `GraphicalGlissando.calculateLine()` にあり、スライド／グリッサンドが譜表の改行をまたぐ場合の描画処理で発生していた。OSMDの描画設定 `EngravingRules.RenderGlissandi` により、この処理を無効化できる。
+OSMD 2.0.0の公式ソースを追跡した結果、`HasEndLine` 参照は `GraphicalGlissando.calculateLine()` にあり、スライドが譜表の改行をまたぐ場合の描画処理で発生していた。OSMD 2.1.2へ更新し、`slide` と `glissando` の両方を元のMusicXMLのまま描画する。
 
-本アプリでは、MusicXMLに `<slide>` が含まれる場合だけ `RenderGlissandi = false` を設定する。これにより以下のデータは保持される。
+これにより以下のデータを表示・再生に利用できる。
 
 - 音符
 - 小節・パート構造
 - 再生情報
 - ストアに保持する元MusicXML
 
-制約として、該当楽譜ではスライド線を表示しない。この対応は、MusicXMLから `<slide>` を削除するより影響範囲が狭く、OSMD側の描画処理だけを停止する暫定回避策である。
+`slide` と `glissando` はいずれもOSMDへ渡るため、楽譜上の線種を含めて描画できる。問題が再発した場合は、どちらかを非表示にするのではなく、再現データとともにOSMD側の不具合として切り分ける。
