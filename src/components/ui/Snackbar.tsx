@@ -4,7 +4,7 @@ export const SnackbarHost = () => {
   return (
     <Toaster
       className="refinear-snackbar"
-      position="top-center"
+      position="top-right"
       richColors
       closeButton
       visibleToasts={1}
@@ -19,7 +19,7 @@ export const SnackbarHost = () => {
         left: 16,
         right: 16,
       }}
-      swipeDirections={['left']}
+      swipeDirections={['right']}
       toastOptions={{ closeButtonAriaLabel: '通知を閉じる' }}
     />
   )
