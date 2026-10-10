@@ -13,6 +13,10 @@ import {
 import { logger } from '../lib/logger'
 import { convertMsczToMusicXml } from '../lib/msczConverter'
 import {
+  getSupportedScoreFileFormat,
+  loadMusicXmlFile,
+} from '../lib/musicXmlFileLoader'
+import {
   SCORE_CACHE_VERSION,
   SCORE_CONVERTER_VERSION,
   type ScoreHistoryItem,
@@ -40,13 +44,14 @@ const getUploadErrorContent = (error: AppErrorInfo) => {
   if (error.code === APP_ERROR_CODES.unsupportedFileFormat) {
     return {
       title: 'ファイル形式を確認してください',
-      description: '拡張子が .mscz のMuseScoreファイルを選択してください。',
+      description:
+        '拡張子が .mscz、.mxl、.musicxml の楽譜ファイルを選択してください。',
     }
   }
   if (error.code === APP_ERROR_CODES.fileTooLarge) {
     return {
       title: 'ファイルサイズが上限を超えています',
-      description: '100MB以下のMSCZファイルを選択してください。',
+      description: '100MB以下の楽譜ファイルを選択してください。',
     }
   }
   if (error.code === APP_ERROR_CODES.scoreConversionFailed) {
@@ -54,6 +59,13 @@ const getUploadErrorContent = (error: AppErrorInfo) => {
       title: '楽譜を読み取れませんでした',
       description:
         'MuseScoreで楽譜を開き、最新版のMSCZとして保存し直してからお試しください。',
+    }
+  }
+  if (error.code === APP_ERROR_CODES.scoreFileLoadFailed) {
+    return {
+      title: '楽譜を読み取れませんでした',
+      description:
+        'MusicXMLまたはMXLファイルが壊れていないか、対応する形式か確認してください。',
     }
   }
   if (error.code === APP_ERROR_CODES.demoFetchFailed) {
@@ -141,7 +153,7 @@ export const FileUploader = () => {
   }, [])
 
   /**
-   * ファイルを処理（MSCZ → MusicXML 変換）
+   * ファイル形式に応じて処理（MSCZは変換、MusicXML系は直接読み込み）
    */
   const processFile = useCallback(
     async (file: File, saveToHistory = true) => {
@@ -149,14 +161,12 @@ export const FileUploader = () => {
 
       try {
         // ファイル形式の検証
-        const validExtensions = ['.mscz']
-        const fileName = file.name.toLowerCase()
-        const isValid = validExtensions.some((ext) => fileName.endsWith(ext))
+        const fileFormat = getSupportedScoreFileFormat(file.name)
 
-        if (!isValid) {
+        if (!fileFormat) {
           const uploadError = createAppError(
             APP_ERROR_CODES.unsupportedFileFormat,
-            '対応していないファイル形式です。MSCZ ファイルをお選びください。',
+            '対応していないファイル形式です。.mscz、.mxl、.musicxml の楽譜ファイルをお選びください。',
             { context: 'ファイル形式の検証' }
           )
           logger.appError(uploadError)
@@ -169,7 +179,7 @@ export const FileUploader = () => {
         if (file.size > maxSize) {
           const uploadError = createAppError(
             APP_ERROR_CODES.fileTooLarge,
-            'ファイルサイズが大きすぎます。100 MB 以下のファイルをお選びください。',
+            'ファイルサイズが大きすぎます。100 MB 以下の楽譜ファイルをお選びください。',
             { context: 'ファイルサイズの検証' }
           )
           logger.appError(uploadError)
@@ -185,9 +195,15 @@ export const FileUploader = () => {
         const arrayBuffer = await file.arrayBuffer()
         const binary = new Uint8Array(arrayBuffer)
 
-        // webmscore で MusicXML に変換
-        failureCode = APP_ERROR_CODES.scoreConversionFailed
-        const { musicXml, musicMxl } = await convertMsczToMusicXml(binary)
+        failureCode =
+          fileFormat === 'mscz'
+            ? APP_ERROR_CODES.scoreConversionFailed
+            : APP_ERROR_CODES.scoreFileLoadFailed
+        const loadedScore =
+          fileFormat === 'mscz'
+            ? await convertMsczToMusicXml(binary)
+            : await loadMusicXmlFile(fileFormat, binary)
+        const { musicXml, musicMxl } = loadedScore
 
         // 結果を一括で格納
         setConvertedScore({
@@ -252,7 +268,7 @@ export const FileUploader = () => {
           await deleteCachedScore(item.id)
           await refreshHistory()
           throw new Error(
-            'この履歴は現在のバージョンでは開けません。MSCZファイルを再度選択してください。'
+            'この履歴は現在のバージョンでは開けません。元の楽譜ファイルを再度選択してください。'
           )
         }
 
@@ -269,7 +285,7 @@ export const FileUploader = () => {
           await deleteCachedScore(item.id)
           await refreshHistory()
           throw new Error(
-            '履歴データを読み込めません。MSCZファイルを再度選択してください。'
+            '履歴データを読み込めません。元の楽譜ファイルを再度選択してください。'
           )
         }
 
@@ -437,7 +453,7 @@ export const FileUploader = () => {
               楽譜を開いて、練習しよう
             </h1>
             <p className="mt-3 text-[15px] leading-6 text-slate-500">
-              MuseScoreファイルを端末内で表示・再生できます
+              楽譜ファイルを端末内で表示・再生できます
             </p>
           </div>
 
@@ -459,7 +475,7 @@ export const FileUploader = () => {
             <input
               ref={fileInputRef}
               type="file"
-              accept=".mscz"
+              accept=".mscz,.mxl,.musicxml"
               onChange={handleFileInput}
               disabled={isLoading}
               className="hidden"
@@ -493,7 +509,9 @@ export const FileUploader = () => {
                   <ErrorDetails error={error} />
                 </Alert>
               )}
-              <p className="text-sm text-slate-500">対応形式 .mscz</p>
+              <p className="text-sm text-slate-500">
+                対応形式 .mscz / .mxl / .musicxml
+              </p>
               <p className="flex items-center justify-center gap-2 text-xs text-slate-500">
                 <Icon name="lock" size="small" />
                 ファイルは外部に送信されません
