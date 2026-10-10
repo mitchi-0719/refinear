@@ -115,7 +115,7 @@ export const Header = ({ hasScore, onOpenInstallGuide }: HeaderProps) => {
               を組み合わせた名前です。楽譜を見て、音を聴き、繰り返し確かめる。その積み重ねで、一つひとつの音や自分のパートを磨いていく音取りの過程を表現しています。
             </p>
             <ul className="mt-5 space-y-1 text-sm leading-6 text-slate-600">
-              <li>MSCZ楽譜をブラウザ内で表示・再生できます。</li>
+              <li>MSCZ・MXL・MusicXML楽譜をブラウザ内で表示・再生できます。</li>
               <li>ファイルは外部へ送信されず、端末内で処理されます。</li>
               <li>
                 音符のタップ、テンポ変更、パート別の音量調整に対応しています。

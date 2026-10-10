@@ -14,8 +14,8 @@ import { featureFlags } from '../config/featureFlags'
 const features = [
   {
     number: '01',
-    title: '.msczをそのまま表示',
-    text: 'MuseScoreファイルを読み込み、そのまま高精細な楽譜で表示します。',
+    title: '楽譜ファイルをそのまま表示',
+    text: 'MSCZ・MXL・MusicXMLを読み込み、高精細な楽譜で表示します。',
     imageSrc: '/LP/App.PNG',
     imagePosition: 'center 17%',
   },
@@ -67,7 +67,7 @@ export const LandingPage = () => (
             Refinear&nbsp; / &nbsp;about
           </p>
           <p className="text-sm font-extrabold tracking-[0.03em] text-[#1261ec]">
-            MSCZ PLAYER FOR VOCAL PRACTICE
+            SCORE PLAYER FOR VOCAL PRACTICE
           </p>
           <h1 className="my-5 text-[29px] leading-[1.55] font-extrabold tracking-[0.02em] md:text-[clamp(32px,4vw,46px)] md:leading-normal">
             スマホで譜面を開く。
@@ -75,7 +75,7 @@ export const LandingPage = () => (
             その音を、すぐ確かめる。
           </h1>
           <p className="leading-[1.8]">
-            MuseScoreファイルをブラウザで表示・再生。
+            楽譜ファイルをブラウザで表示・再生。
             <br />
             気になる音符はタップして、その場で音を確認できます。
           </p>
@@ -162,7 +162,7 @@ export const LandingPage = () => (
           アプリを開く → /
         </ActionLink>
         <p className="my-1">refinear /</p>
-        <small>対応形式 .mscz / インストール不要</small>
+        <small>対応形式 .mscz / .mxl / .musicxml / インストール不要</small>
       </section>
     </main>
     <Footer />

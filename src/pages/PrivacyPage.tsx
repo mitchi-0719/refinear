@@ -11,7 +11,7 @@ export const PrivacyPage = () => (
   >
     <h2 className={legalHeadingClass}>楽譜データの取扱い</h2>
     <p className="mt-3">
-      選択したMSCZファイルの読み込み、変換、表示、再生はブラウザ内で行います。現在のRefinearは、楽譜ファイルや演奏履歴を運営者のサーバーへ送信しません。
+      選択した楽譜ファイルの読み込み、変換、表示、再生はブラウザ内で行います。現在のRefinearは、楽譜ファイルや演奏履歴を運営者のサーバーへ送信しません。
     </p>
 
     <h2 className={legalHeadingClass}>端末内に保存する情報</h2>

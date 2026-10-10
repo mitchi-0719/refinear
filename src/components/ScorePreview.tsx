@@ -602,7 +602,7 @@ export const ScorePreview = () => {
             <Alert variant="info">
               <AlertTitle>処理中...</AlertTitle>
               <AlertDescription>
-                楽譜ファイルを読み込んで MusicXML に変換しています
+                楽譜ファイルを読み込んでいます
               </AlertDescription>
             </Alert>
           )}

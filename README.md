@@ -1,6 +1,6 @@
 # Refinear（リファイナー）
 
-Refinear は、MuseScore の `.mscz` ファイルをブラウザ上で読み込み、**解析・楽譜表示・再生**までをフロントエンドのみで完結させる音取りアプリです。
+Refinear は、`.mscz`、`.mxl`、`.musicxml` の楽譜ファイルをブラウザ上で読み込み、**解析・楽譜表示・再生**までをフロントエンドのみで完結させる音取りアプリです。
 
 名前は「洗練する」を意味する **Refine** と、「聴く」を意味する **Hear** を組み合わせた造語です。楽譜を見て、音を聴き、繰り返し確かめる。その積み重ねによって、一つひとつの音や自分のパートを磨いていく——そんな音取りの過程を表現しています。
 
@@ -8,7 +8,7 @@ Refinear は、MuseScore の `.mscz` ファイルをブラウザ上で読み込�
 
 ## 概要
 
-- バックエンドを使わず、ブラウザ内で `.mscz` を処理
+- バックエンドを使わず、ブラウザ内で `.mscz`、`.mxl`、`.musicxml` を処理
 - 楽譜を SVG 描画して表示
 - 音符タップ時の発音・再生/停止などの基本操作に対応
 - `public/demo.mscz` を使ったデモ読み込みに対応
@@ -28,7 +28,7 @@ Refinear は、MuseScore の `.mscz` ファイルをブラウザ上で読み込�
 主な責務は以下のように分離しています。
 
 - `src/components/`
-  - `FileUploader`: `.mscz` ファイルの入力・バリデーション・デモ読み込み
+  - `FileUploader`: `.mscz`、`.mxl`、`.musicxml` ファイルの入力・バリデーション・デモ読み込み
   - `ScorePreview`: 楽譜表示、再生フック接続、音符クリック操作
   - `ControlModal`: 再生/停止 UI
 - `src/hooks/`
@@ -37,14 +37,15 @@ Refinear は、MuseScore の `.mscz` ファイルをブラウザ上で読み込�
   - `useNoteInteraction`: クリック位置と楽譜ノートの対応付け
 - `src/lib/`
   - `msczConverter`: `webmscore` で `.mscz` を MusicXML / MXL へ変換
+  - `musicXmlFileLoader`: `.mxl` と `.musicxml` を直接読み込み
   - `musicXmlParser`: MusicXML から再生イベント列を抽出
 - `src/stores/useScoreStore.ts`
   - ファイル状態、変換結果、再生状態を一元管理
 
 ## 仕組み（処理フロー）
 
-1. ユーザーが `.mscz` をアップロード（またはデモファイルを読み込み）
-2. `webmscore` で MusicXML（必要に応じて MXL）へ変換
+1. ユーザーが `.mscz`、`.mxl`、`.musicxml` をアップロード（またはデモファイルを読み込み）
+2. `.mscz` は`webmscore`でMusicXML（必要に応じてMXL）へ変換し、`.mxl`と`.musicxml`は直接読み込む
 3. `useOSMD` が MusicXML を読み込み、楽譜を描画
 4. `musicXmlParser` が MusicXML をノートイベントへ変換
 5. `useAudioPlayer` が Tone.js でイベントを再生
@@ -98,7 +99,7 @@ Cloudflare Workers Buildsでは、ビルド時に提供される`WORKERS_CI_BRAN
 ### 5. 動作確認
 
 1. 画面の「デモ楽譜を読み込み」をクリック  
-   または `.mscz` ファイルをドラッグ&ドロップ
+   または対応する楽譜ファイルをドラッグ&ドロップ
 2. 楽譜が表示されることを確認
 3. 再生ボタンで音が出ることを確認
 
