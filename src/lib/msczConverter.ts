@@ -64,6 +64,9 @@ const HARMONY_TAG_PATTERN = /<harmony\b[\s\S]*?<\/harmony>/g
 const DIRECTION_TAG_PATTERN = /<direction\b[\s\S]*?<\/direction>/g
 const DIRECTION_TYPE_TAG_PATTERN = /<direction-type\b[\s\S]*?<\/direction-type>/
 const NOTE_TAG_PATTERN = /<note\b[\s\S]*?<\/note>/g
+const CREDIT_TAG_PATTERN = /<credit\b[\s\S]*?<\/credit>/g
+const WORK_TITLE_PATTERN = /(<work-title\b[^>]*>)([\s\S]*?)(<\/work-title>)/
+const UNTITLED_SCORE_TITLES = new Set(['untitled score', '無題のスコア'])
 
 const assertPlayableMusicXml = (musicXml: string): void => {
   const doc = new DOMParser().parseFromString(musicXml, 'application/xml')
@@ -152,6 +155,31 @@ const escapeXml = (value: string): string =>
     .replaceAll('"', '&quot;')
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
+
+const getXmlText = (value: string): string =>
+  value.replace(/<[^>]+>/g, '').trim()
+
+const restoreDisplayedScoreTitle = (musicXml: string): string => {
+  const workTitleMatch = musicXml.match(WORK_TITLE_PATTERN)
+  if (!workTitleMatch) return musicXml
+
+  const workTitle = getXmlText(workTitleMatch[2] ?? '').toLowerCase()
+  if (!UNTITLED_SCORE_TITLES.has(workTitle)) return musicXml
+
+  const titleCredit = (musicXml.match(CREDIT_TAG_PATTERN) ?? []).find(
+    (credit) => /<credit-type\b[^>]*>\s*title\s*<\/credit-type>/i.test(credit)
+  )
+  const creditWords = titleCredit?.match(
+    /<credit-words\b[^>]*>([\s\S]*?)<\/credit-words>/i
+  )?.[1]
+  if (!creditWords || !getXmlText(creditWords)) return musicXml
+
+  return musicXml.replace(
+    WORK_TITLE_PATTERN,
+    (_match, openingTag: string, _currentTitle: string, closingTag: string) =>
+      `${openingTag}${creditWords}${closingTag}`
+  )
+}
 
 const normalizeTextTempoDirections = (musicXml: string): string =>
   musicXml.replace(DIRECTION_TAG_PATTERN, (direction) => {
@@ -1119,7 +1147,9 @@ export const convertMsczToMusicXml = async (
     rawMusicXml,
     msczArchiveBinary
   )
-  const musicXml = normalizeTextTempoDirections(restoreResult.musicXml)
+  const musicXml = normalizeTextTempoDirections(
+    restoreDisplayedScoreTitle(restoreResult.musicXml)
+  )
 
   let musicMxl: Uint8Array | null = null
   try {

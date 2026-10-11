@@ -106,6 +106,27 @@ const createMusicXml = (harmonies: string[]): string => `
   </part>
 </score-partwise>`
 
+const createMusicXmlWithTitle = ({
+  creditTitle,
+  workTitle,
+}: {
+  creditTitle?: string
+  workTitle: string
+}): string => `
+<score-partwise>
+  <work><work-title>${workTitle}</work-title></work>
+  ${
+    creditTitle
+      ? `<credit page="1">
+    <credit-type>title</credit-type>
+    <credit-words>${creditTitle}</credit-words>
+  </credit>`
+      : ''
+  }
+  <part-list><score-part id="P1" /></part-list>
+  <part id="P1"><measure number="1" /></part>
+</score-partwise>`
+
 const noneHarmony =
   '<harmony><root><root-step>C</root-step></root><kind>none</kind></harmony>'
 
@@ -158,5 +179,69 @@ describe('convertMsczToMusicXml', () => {
     await expect(convertMsczToMusicXml(mscz)).resolves.toMatchObject({
       musicXml: rawMusicXml,
     })
+  })
+
+  it.each(['無題のスコア', 'Untitled Score'])(
+    '既定のwork-title「%s」を表示用タイトルで補正する',
+    async (workTitle) => {
+      webMscoreMocks.saveXml.mockResolvedValue(
+        createMusicXmlWithTitle({
+          creditTitle: '最後の恋煩い',
+          workTitle,
+        })
+      )
+      const mscz = await createMscz([])
+
+      const { musicXml } = await convertMsczToMusicXml(mscz)
+
+      expect(musicXml).toContain('<work-title>最後の恋煩い</work-title>')
+    }
+  )
+
+  it('明示的なwork-titleは表示用タイトルと異なっても維持する', async () => {
+    webMscoreMocks.saveXml.mockResolvedValue(
+      createMusicXmlWithTitle({
+        creditTitle: '表示用タイトル',
+        workTitle: '作品タイトル',
+      })
+    )
+    const mscz = await createMscz([])
+
+    const { musicXml } = await convertMsczToMusicXml(mscz)
+
+    expect(musicXml).toContain('<work-title>作品タイトル</work-title>')
+  })
+
+  it('表示用タイトルがない場合は既定のwork-titleを維持する', async () => {
+    webMscoreMocks.saveXml.mockResolvedValue(
+      createMusicXmlWithTitle({ workTitle: '無題のスコア' })
+    )
+    const mscz = await createMscz([])
+
+    const { musicXml } = await convertMsczToMusicXml(mscz)
+
+    expect(musicXml).toContain('<work-title>無題のスコア</work-title>')
+  })
+
+  it('MXLにも補正した表示用タイトルを反映する', async () => {
+    webMscoreMocks.saveXml.mockResolvedValue(
+      createMusicXmlWithTitle({
+        creditTitle: '最後の恋煩い',
+        workTitle: '無題のスコア',
+      })
+    )
+    const rawMxl = new JSZip()
+    rawMxl.file('score.xml', createMusicXml([]))
+    webMscoreMocks.saveMxl.mockResolvedValue(
+      await rawMxl.generateAsync({ type: 'uint8array' })
+    )
+    const mscz = await createMscz([])
+
+    const { musicMxl } = await convertMsczToMusicXml(mscz)
+    const convertedMxl = await JSZip.loadAsync(musicMxl!)
+
+    await expect(
+      convertedMxl.file('score.xml')?.async('string')
+    ).resolves.toContain('<work-title>最後の恋煩い</work-title>')
   })
 })
