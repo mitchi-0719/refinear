@@ -20,6 +20,7 @@ describe('getCachedScoreCompatibility', () => {
     for (const converterVersion of [
       'webmscore-1.2.1',
       'webmscore-1.2.1-swing-1',
+      'webmscore-1.2.1-swing-1-key-signature-1',
     ]) {
       expect(
         getCachedScoreCompatibility({

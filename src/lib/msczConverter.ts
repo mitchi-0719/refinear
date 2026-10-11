@@ -12,7 +12,7 @@ type MusicXmlPitch = {
 }
 
 type MscxHarmony = {
-  root: MusicXmlPitch | null
+  root: MusicXmlPitch
   bass: MusicXmlPitch | null
   name: string
 }
@@ -54,7 +54,7 @@ type MscxStaffNotation = {
 }
 
 type MscxPlaybackData = {
-  harmonies: MscxHarmony[]
+  harmonies: Array<MscxHarmony | null>
   chordPlayback: MscxChordPlayback[]
   swingMarkers: MscxSwingMarker[]
   staffNotations: MscxStaffNotation[]
@@ -230,21 +230,21 @@ const findMscxFile = async (fileBinary: Uint8Array): Promise<string | null> => {
   }
 }
 
-const extractMscxHarmonies = (doc: Document): MscxHarmony[] => {
-  return Array.from(doc.querySelectorAll('Harmony'))
-    .map((harmony) => {
-      const harmonyInfo = getDirectChild(harmony, 'harmonyInfo')
-      if (!harmonyInfo) return null
-      const rootTpc = getDirectChildText(harmonyInfo, 'root')
-      const bassTpc = getDirectChildText(harmonyInfo, 'bass')
+const extractMscxHarmonies = (doc: Document): Array<MscxHarmony | null> => {
+  return Array.from(doc.querySelectorAll('Harmony')).map((harmony) => {
+    const harmonyInfo = getDirectChild(harmony, 'harmonyInfo')
+    if (!harmonyInfo) return null
+    const rootTpc = getDirectChildText(harmonyInfo, 'root')
+    const bassTpc = getDirectChildText(harmonyInfo, 'bass')
+    const root = tpcToMusicXmlPitch(rootTpc)
+    if (!root) return null
 
-      return {
-        root: tpcToMusicXmlPitch(rootTpc),
-        bass: tpcToMusicXmlPitch(bassTpc),
-        name: getDirectChildText(harmonyInfo, 'name'),
-      }
-    })
-    .filter((harmony): harmony is MscxHarmony => Boolean(harmony?.root))
+    return {
+      root,
+      bass: tpcToMusicXmlPitch(bassTpc),
+      name: getDirectChildText(harmonyInfo, 'name'),
+    }
+  })
 }
 
 const extractMscxChordPlayback = (doc: Document): MscxChordPlayback[] => {
@@ -876,9 +876,7 @@ const buildHarmonyXml = (harmony: MscxHarmony): string => {
   const lines = ['<harmony print-frame="no">']
   const chordKind = getChordKind(harmony.name)
 
-  if (harmony.root) {
-    addPitchXml(lines, 'root', harmony.root)
-  }
+  addPitchXml(lines, 'root', harmony.root)
 
   const text = chordKind.text ? ` text="${escapeXml(chordKind.text)}"` : ''
   lines.push(`        <kind${text}>${chordKind.kind}</kind>`)
@@ -1043,7 +1041,7 @@ const restorePlaybackMetadataFromMscz = async (
     musicXmlWithKeySignatures,
     chordPlayback
   )
-  if (!harmonies.length) {
+  if (!harmonies.some((harmony) => harmony !== null)) {
     return {
       musicXml: restoreSwingDirections(musicXmlWithTremolos, swingMarkers),
     }
@@ -1063,7 +1061,10 @@ const restorePlaybackMetadataFromMscz = async (
   let harmonyIndex = 0
   const musicXmlWithHarmonies = musicXmlWithTremolos.replace(
     HARMONY_TAG_PATTERN,
-    () => buildHarmonyXml(harmonies[harmonyIndex++])
+    (harmonyXml) => {
+      const harmony = harmonies[harmonyIndex++]
+      return harmony ? buildHarmonyXml(harmony) : harmonyXml
+    }
   )
   return {
     musicXml: restoreSwingDirections(musicXmlWithHarmonies, swingMarkers),
