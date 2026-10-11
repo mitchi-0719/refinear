@@ -21,6 +21,7 @@ describe('getCachedScoreCompatibility', () => {
       'webmscore-1.2.1',
       'webmscore-1.2.1-swing-1',
       'webmscore-1.2.1-swing-1-key-signature-1',
+      'webmscore-1.2.1-swing-1-key-signature-1-harmony-2',
     ]) {
       expect(
         getCachedScoreCompatibility({
