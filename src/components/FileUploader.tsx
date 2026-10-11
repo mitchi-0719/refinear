@@ -10,6 +10,7 @@ import {
   createAppError,
   getErrorMessage,
 } from '../lib/appError'
+import { isIOSDevice } from '../lib/device'
 import { logger } from '../lib/logger'
 import { convertMsczToMusicXml } from '../lib/msczConverter'
 import {
@@ -475,7 +476,7 @@ export const FileUploader = () => {
             <input
               ref={fileInputRef}
               type="file"
-              accept=".mscz,.mxl,.musicxml"
+              accept={isIOSDevice() ? undefined : '.mscz,.mxl,.musicxml'}
               onChange={handleFileInput}
               disabled={isLoading}
               className="hidden"
