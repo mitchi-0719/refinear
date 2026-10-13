@@ -1,6 +1,6 @@
 # Refinear（リファイナー）
 
-Refinear は、MuseScore の `.mscz` ファイルをブラウザ上で読み込み、**解析・楽譜表示・再生**までをフロントエンドのみで完結させる音取りアプリです。
+Refinear は、`.mscz`、`.mxl`、`.musicxml` の楽譜ファイルをブラウザ上で読み込み、**解析・楽譜表示・再生**までをフロントエンドのみで完結させる音取りアプリです。
 
 名前は「洗練する」を意味する **Refine** と、「聴く」を意味する **Hear** を組み合わせた造語です。楽譜を見て、音を聴き、繰り返し確かめる。その積み重ねによって、一つひとつの音や自分のパートを磨いていく——そんな音取りの過程を表現しています。
 
@@ -8,7 +8,7 @@ Refinear は、MuseScore の `.mscz` ファイルをブラウザ上で読み込�
 
 ## 概要
 
-- バックエンドを使わず、ブラウザ内で `.mscz` を処理
+- バックエンドを使わず、ブラウザ内で `.mscz`、`.mxl`、`.musicxml` を処理
 - 楽譜を SVG 描画して表示
 - 音符タップ時の発音・再生/停止などの基本操作に対応
 - `public/demo.mscz` を使ったデモ読み込みに対応
@@ -28,7 +28,7 @@ Refinear は、MuseScore の `.mscz` ファイルをブラウザ上で読み込�
 主な責務は以下のように分離しています。
 
 - `src/components/`
-  - `FileUploader`: `.mscz` ファイルの入力・バリデーション・デモ読み込み
+  - `FileUploader`: `.mscz`、`.mxl`、`.musicxml` ファイルの入力・バリデーション・デモ読み込み
   - `ScorePreview`: 楽譜表示、再生フック接続、音符クリック操作
   - `ControlModal`: 再生/停止 UI
 - `src/hooks/`
@@ -37,14 +37,15 @@ Refinear は、MuseScore の `.mscz` ファイルをブラウザ上で読み込�
   - `useNoteInteraction`: クリック位置と楽譜ノートの対応付け
 - `src/lib/`
   - `msczConverter`: `webmscore` で `.mscz` を MusicXML / MXL へ変換
+  - `musicXmlFileLoader`: `.mxl` と `.musicxml` を直接読み込み
   - `musicXmlParser`: MusicXML から再生イベント列を抽出
 - `src/stores/useScoreStore.ts`
   - ファイル状態、変換結果、再生状態を一元管理
 
 ## 仕組み（処理フロー）
 
-1. ユーザーが `.mscz` をアップロード（またはデモファイルを読み込み）
-2. `webmscore` で MusicXML（必要に応じて MXL）へ変換
+1. ユーザーが `.mscz`、`.mxl`、`.musicxml` をアップロード（またはデモファイルを読み込み）
+2. `.mscz` は`webmscore`でMusicXML（必要に応じてMXL）へ変換し、`.mxl`と`.musicxml`は直接読み込む
 3. `useOSMD` が MusicXML を読み込み、楽譜を描画
 4. `musicXmlParser` が MusicXML をノートイベントへ変換
 5. `useAudioPlayer` が Tone.js でイベントを再生
@@ -79,18 +80,26 @@ npm run dev:production
 
 これはproduction用の環境変数やFeature Flagをローカルで確認するためのコマンドです。本番ビルドそのものを確認するときは、`npm run build`の後に`npm run preview`を実行してください。
 
-### 4. Feature Flag
+### 4. 実行環境とFeature Flag
+
+アプリは次の3つの実行環境を区別します。
+
+- `production`: ローカルのproductionビルド、またはCloudflare Workers Buildsの`main`
+- `preview`: Cloudflare Workers Buildsの`main`以外のブランチ
+- `development`: ローカルのproduction以外のViteモード
+
+Cloudflare Workers Buildsでは、ビルド時に提供される`WORKERS_CI_BRANCH`から判定します。production以外では、ブラウザコンソールのアプリログ、デモ楽譜ボタン、Alert内のエラーコードを有効にします。
 
 公開前の機能は `src/config/featureFlags.ts` で管理します。`VITE_FEATURE_*` 環境変数は、値が文字列の `true` の場合だけ有効になり、未設定を含むそれ以外の値では無効になります。
 
-開発環境で有効にするフラグは `.env.development` に記載します。productionではデフォルトで無効になるため、無効化用の環境変数を設定する必要はありません。機能を正式公開するときは、環境変数、`featureFlags` の項目、利用箇所の条件分岐を削除します。
+開発環境で有効にするフラグは `.env.development` に記載します。productionではデフォルトで無効になるため、無効化用の環境変数を設定する必要はありません。機能を正式公開するときは、環境変数、`featureFlags` の項目、利用箇所の条件分岐を削除します。デモ楽譜ボタンは公開前機能ではなく診断機能として扱うため、個別のFeature Flagではなく実行環境で制御します。
 
 `VITE_` で始まる環境変数はブラウザへ公開されるため、秘密情報には使用しないでください。
 
 ### 5. 動作確認
 
 1. 画面の「デモ楽譜を読み込み」をクリック  
-   または `.mscz` ファイルをドラッグ&ドロップ
+   または対応する楽譜ファイルをドラッグ&ドロップ
 2. 楽譜が表示されることを確認
 3. 再生ボタンで音が出ることを確認
 

@@ -4,6 +4,7 @@ import type {
   AudioMixerControls,
   AudioPlaybackControls,
 } from '../../hooks/useAudioPlayer'
+import { useBodyScrollLock } from '../../hooks/useBodyScrollLock'
 import { useOnOffState } from '../../hooks/useOnOffState'
 import { useScoreStore } from '../../stores/useScoreStore'
 import { Icon } from '../ui/Icon'
@@ -37,6 +38,8 @@ export const ControlModal: FC<ControlModalProps> = ({
   const { state: isOpen, toggle: toggleDrawer } = useOnOffState(false)
   const modalRef = useRef<HTMLElement | null>(null)
 
+  useBodyScrollLock(isOpen)
+
   useEffect(() => {
     const modal = modalRef.current
     if (!modal) return
@@ -55,7 +58,7 @@ export const ControlModal: FC<ControlModalProps> = ({
   return (
     <aside
       ref={modalRef}
-      className="fixed right-0 bottom-0 left-0 z-50 rounded-t-2xl border border-slate-200 bg-white shadow-[0_-8px_30px_rgba(15,23,42,0.12)] select-none"
+      className="fixed right-0 bottom-0 left-0 z-50 overscroll-contain rounded-t-2xl border border-slate-200 bg-white shadow-[0_-8px_30px_rgba(15,23,42,0.12)] select-none"
       onClick={(event) => event.stopPropagation()}
       onPointerDown={(event) => event.stopPropagation()}
       onTouchStart={(event) => event.stopPropagation()}
@@ -90,7 +93,7 @@ export const ControlModal: FC<ControlModalProps> = ({
               ミキサー
             </span>
           </div>
-          <div className="overflow-x-auto overflow-y-hidden px-4 py-3 pb-[max(14px,env(safe-area-inset-bottom))]">
+          <div className="overflow-x-auto overflow-y-hidden overscroll-contain px-4 py-3 pb-[max(14px,env(safe-area-inset-bottom))]">
             <MixerPanel
               mixerControls={mixerControls}
               visibilityControls={visibilityControls}

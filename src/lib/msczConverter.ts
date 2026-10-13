@@ -12,7 +12,7 @@ type MusicXmlPitch = {
 }
 
 type MscxHarmony = {
-  root: MusicXmlPitch | null
+  root: MusicXmlPitch
   bass: MusicXmlPitch | null
   name: string
 }
@@ -54,7 +54,7 @@ type MscxStaffNotation = {
 }
 
 type MscxPlaybackData = {
-  harmonies: MscxHarmony[]
+  harmonies: Array<MscxHarmony | null>
   chordPlayback: MscxChordPlayback[]
   swingMarkers: MscxSwingMarker[]
   staffNotations: MscxStaffNotation[]
@@ -64,6 +64,9 @@ const HARMONY_TAG_PATTERN = /<harmony\b[\s\S]*?<\/harmony>/g
 const DIRECTION_TAG_PATTERN = /<direction\b[\s\S]*?<\/direction>/g
 const DIRECTION_TYPE_TAG_PATTERN = /<direction-type\b[\s\S]*?<\/direction-type>/
 const NOTE_TAG_PATTERN = /<note\b[\s\S]*?<\/note>/g
+const CREDIT_TAG_PATTERN = /<credit\b[\s\S]*?<\/credit>/g
+const WORK_TITLE_PATTERN = /(<work-title\b[^>]*>)([\s\S]*?)(<\/work-title>)/
+const UNTITLED_SCORE_TITLES = new Set(['untitled score', '無題のスコア'])
 
 const assertPlayableMusicXml = (musicXml: string): void => {
   const doc = new DOMParser().parseFromString(musicXml, 'application/xml')
@@ -153,6 +156,31 @@ const escapeXml = (value: string): string =>
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
 
+const getXmlText = (value: string): string =>
+  value.replace(/<[^>]+>/g, '').trim()
+
+const restoreDisplayedScoreTitle = (musicXml: string): string => {
+  const workTitleMatch = musicXml.match(WORK_TITLE_PATTERN)
+  if (!workTitleMatch) return musicXml
+
+  const workTitle = getXmlText(workTitleMatch[2] ?? '').toLowerCase()
+  if (!UNTITLED_SCORE_TITLES.has(workTitle)) return musicXml
+
+  const titleCredit = (musicXml.match(CREDIT_TAG_PATTERN) ?? []).find(
+    (credit) => /<credit-type\b[^>]*>\s*title\s*<\/credit-type>/i.test(credit)
+  )
+  const creditWords = titleCredit?.match(
+    /<credit-words\b[^>]*>([\s\S]*?)<\/credit-words>/i
+  )?.[1]
+  if (!creditWords || !getXmlText(creditWords)) return musicXml
+
+  return musicXml.replace(
+    WORK_TITLE_PATTERN,
+    (_match, openingTag: string, _currentTitle: string, closingTag: string) =>
+      `${openingTag}${creditWords}${closingTag}`
+  )
+}
+
 const normalizeTextTempoDirections = (musicXml: string): string =>
   musicXml.replace(DIRECTION_TAG_PATTERN, (direction) => {
     if (
@@ -230,21 +258,21 @@ const findMscxFile = async (fileBinary: Uint8Array): Promise<string | null> => {
   }
 }
 
-const extractMscxHarmonies = (doc: Document): MscxHarmony[] => {
-  return Array.from(doc.querySelectorAll('Harmony'))
-    .map((harmony) => {
-      const harmonyInfo = getDirectChild(harmony, 'harmonyInfo')
-      if (!harmonyInfo) return null
-      const rootTpc = getDirectChildText(harmonyInfo, 'root')
-      const bassTpc = getDirectChildText(harmonyInfo, 'bass')
+const extractMscxHarmonies = (doc: Document): Array<MscxHarmony | null> => {
+  return Array.from(doc.querySelectorAll('Harmony')).map((harmony) => {
+    const harmonyInfo = getDirectChild(harmony, 'harmonyInfo')
+    if (!harmonyInfo) return null
+    const rootTpc = getDirectChildText(harmonyInfo, 'root')
+    const bassTpc = getDirectChildText(harmonyInfo, 'bass')
+    const root = tpcToMusicXmlPitch(rootTpc)
+    if (!root) return null
 
-      return {
-        root: tpcToMusicXmlPitch(rootTpc),
-        bass: tpcToMusicXmlPitch(bassTpc),
-        name: getDirectChildText(harmonyInfo, 'name'),
-      }
-    })
-    .filter((harmony): harmony is MscxHarmony => Boolean(harmony?.root))
+    return {
+      root,
+      bass: tpcToMusicXmlPitch(bassTpc),
+      name: getDirectChildText(harmonyInfo, 'name'),
+    }
+  })
 }
 
 const extractMscxChordPlayback = (doc: Document): MscxChordPlayback[] => {
@@ -876,9 +904,7 @@ const buildHarmonyXml = (harmony: MscxHarmony): string => {
   const lines = ['<harmony print-frame="no">']
   const chordKind = getChordKind(harmony.name)
 
-  if (harmony.root) {
-    addPitchXml(lines, 'root', harmony.root)
-  }
+  addPitchXml(lines, 'root', harmony.root)
 
   const text = chordKind.text ? ` text="${escapeXml(chordKind.text)}"` : ''
   lines.push(`        <kind${text}>${chordKind.kind}</kind>`)
@@ -1043,7 +1069,7 @@ const restorePlaybackMetadataFromMscz = async (
     musicXmlWithKeySignatures,
     chordPlayback
   )
-  if (!harmonies.length) {
+  if (!harmonies.some((harmony) => harmony !== null)) {
     return {
       musicXml: restoreSwingDirections(musicXmlWithTremolos, swingMarkers),
     }
@@ -1063,7 +1089,10 @@ const restorePlaybackMetadataFromMscz = async (
   let harmonyIndex = 0
   const musicXmlWithHarmonies = musicXmlWithTremolos.replace(
     HARMONY_TAG_PATTERN,
-    () => buildHarmonyXml(harmonies[harmonyIndex++])
+    (harmonyXml) => {
+      const harmony = harmonies[harmonyIndex++]
+      return harmony ? buildHarmonyXml(harmony) : harmonyXml
+    }
   )
   return {
     musicXml: restoreSwingDirections(musicXmlWithHarmonies, swingMarkers),
@@ -1118,7 +1147,9 @@ export const convertMsczToMusicXml = async (
     rawMusicXml,
     msczArchiveBinary
   )
-  const musicXml = normalizeTextTempoDirections(restoreResult.musicXml)
+  const musicXml = normalizeTextTempoDirections(
+    restoreDisplayedScoreTitle(restoreResult.musicXml)
+  )
 
   let musicMxl: Uint8Array | null = null
   try {

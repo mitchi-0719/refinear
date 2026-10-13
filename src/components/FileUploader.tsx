@@ -3,8 +3,20 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 
 import { featureFlags } from '../config/featureFlags'
+import {
+  APP_ERROR_CODES,
+  type AppErrorCode,
+  type AppErrorInfo,
+  createAppError,
+  getErrorMessage,
+} from '../lib/appError'
+import { isIOSDevice } from '../lib/device'
 import { logger } from '../lib/logger'
 import { convertMsczToMusicXml } from '../lib/msczConverter'
+import {
+  getSupportedScoreFileFormat,
+  loadMusicXmlFile,
+} from '../lib/musicXmlFileLoader'
 import {
   SCORE_CACHE_VERSION,
   SCORE_CONVERTER_VERSION,
@@ -20,6 +32,7 @@ import {
 import { showSnackbar } from '../lib/snackbar'
 import { useScoreStore } from '../stores/useScoreStore'
 import { Alert, AlertDescription, AlertTitle } from './ui/Alert'
+import { ErrorDetails } from './ui/ErrorDetails'
 import { Icon } from './ui/Icon'
 
 const formatOpenedAt = (timestamp: number) =>
@@ -28,30 +41,35 @@ const formatOpenedAt = (timestamp: number) =>
     timeStyle: 'short',
   }).format(timestamp)
 
-const getUploadErrorContent = (message: string) => {
-  if (message.includes('対応していないファイル形式')) {
+const getUploadErrorContent = (error: AppErrorInfo) => {
+  if (error.code === APP_ERROR_CODES.unsupportedFileFormat) {
     return {
       title: 'ファイル形式を確認してください',
-      description: '拡張子が .mscz のMuseScoreファイルを選択してください。',
+      description:
+        '拡張子が .mscz、.mxl、.musicxml の楽譜ファイルを選択してください。',
     }
   }
-  if (message.includes('ファイルサイズが大きすぎます')) {
+  if (error.code === APP_ERROR_CODES.fileTooLarge) {
     return {
       title: 'ファイルサイズが上限を超えています',
-      description: '100MB以下のMSCZファイルを選択してください。',
+      description: '100MB以下の楽譜ファイルを選択してください。',
     }
   }
-  if (
-    message.includes('MusicXML に変換できません') ||
-    message.includes('変換')
-  ) {
+  if (error.code === APP_ERROR_CODES.scoreConversionFailed) {
     return {
       title: '楽譜を読み取れませんでした',
       description:
         'MuseScoreで楽譜を開き、最新版のMSCZとして保存し直してからお試しください。',
     }
   }
-  if (message.includes('demo.mscz')) {
+  if (error.code === APP_ERROR_CODES.scoreFileLoadFailed) {
+    return {
+      title: '楽譜を読み取れませんでした',
+      description:
+        'MusicXMLまたはMXLファイルが壊れていないか、対応する形式か確認してください。',
+    }
+  }
+  if (error.code === APP_ERROR_CODES.demoFetchFailed) {
     return {
       title: 'サンプル楽譜を読み込めませんでした',
       description: '通信状態を確認して、もう一度お試しください。',
@@ -59,7 +77,7 @@ const getUploadErrorContent = (message: string) => {
   }
   return {
     title: '楽譜を開けませんでした',
-    description: `${message} 別のファイルを選ぶか、もう一度お試しください。`,
+    description: `${error.message} 別のファイルを選ぶか、もう一度お試しください。`,
   }
 }
 
@@ -71,8 +89,10 @@ export const FileUploader = () => {
   const [isHistoryLoading, setIsHistoryLoading] = useState(true)
   const [restoringId, setRestoringId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
-  const [historyError, setHistoryError] = useState<string | null>(null)
-  const [storageWarning, setStorageWarning] = useState<string | null>(null)
+  const [historyError, setHistoryError] = useState<AppErrorInfo | null>(null)
+  const [storageWarning, setStorageWarning] = useState<AppErrorInfo | null>(
+    null
+  )
   const fileInputRef = useRef<HTMLInputElement>(null)
   const hasAutoLoadedDemoRef = useRef(false)
 
@@ -94,9 +114,13 @@ export const FileUploader = () => {
       setHistory(await listRecentScores())
       setHistoryError(null)
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : '履歴を読み込めませんでした'
-      setHistoryError(message)
+      const historyLoadError = createAppError(
+        APP_ERROR_CODES.historyLoadFailed,
+        getErrorMessage(err, '履歴を読み込めませんでした'),
+        { context: '履歴の読み込み', cause: err }
+      )
+      logger.appError(historyLoadError, err)
+      setHistoryError(historyLoadError)
     } finally {
       setIsHistoryLoading(false)
     }
@@ -112,9 +136,13 @@ export const FileUploader = () => {
       })
       .catch((err: unknown) => {
         if (cancelled) return
-        const message =
-          err instanceof Error ? err.message : '履歴を読み込めませんでした'
-        setHistoryError(message)
+        const historyLoadError = createAppError(
+          APP_ERROR_CODES.historyLoadFailed,
+          getErrorMessage(err, '履歴を読み込めませんでした'),
+          { context: '履歴の読み込み', cause: err }
+        )
+        logger.appError(historyLoadError, err)
+        setHistoryError(historyLoadError)
       })
       .finally(() => {
         if (!cancelled) setIsHistoryLoading(false)
@@ -126,29 +154,37 @@ export const FileUploader = () => {
   }, [])
 
   /**
-   * ファイルを処理（MSCZ → MusicXML 変換）
+   * ファイル形式に応じて処理（MSCZは変換、MusicXML系は直接読み込み）
    */
   const processFile = useCallback(
     async (file: File, saveToHistory = true) => {
+      let failureCode: AppErrorCode = APP_ERROR_CODES.fileReadFailed
+
       try {
         // ファイル形式の検証
-        const validExtensions = ['.mscz']
-        const fileName = file.name.toLowerCase()
-        const isValid = validExtensions.some((ext) => fileName.endsWith(ext))
+        const fileFormat = getSupportedScoreFileFormat(file.name)
 
-        if (!isValid) {
-          setError(
-            `対応していないファイル形式です。MSCZ ファイルをお選びください。`
+        if (!fileFormat) {
+          const uploadError = createAppError(
+            APP_ERROR_CODES.unsupportedFileFormat,
+            '対応していないファイル形式です。.mscz、.mxl、.musicxml の楽譜ファイルをお選びください。',
+            { context: 'ファイル形式の検証' }
           )
+          logger.appError(uploadError)
+          setError(uploadError)
           return
         }
 
         // ファイルサイズの検証（100 MB まで）
         const maxSize = 100 * 1024 * 1024
         if (file.size > maxSize) {
-          setError(
-            `ファイルサイズが大きすぎます。100 MB 以下のファイルをお選びください。`
+          const uploadError = createAppError(
+            APP_ERROR_CODES.fileTooLarge,
+            'ファイルサイズが大きすぎます。100 MB 以下の楽譜ファイルをお選びください。',
+            { context: 'ファイルサイズの検証' }
           )
+          logger.appError(uploadError)
+          setError(uploadError)
           return
         }
 
@@ -160,8 +196,15 @@ export const FileUploader = () => {
         const arrayBuffer = await file.arrayBuffer()
         const binary = new Uint8Array(arrayBuffer)
 
-        // webmscore で MusicXML に変換
-        const { musicXml, musicMxl } = await convertMsczToMusicXml(binary)
+        failureCode =
+          fileFormat === 'mscz'
+            ? APP_ERROR_CODES.scoreConversionFailed
+            : APP_ERROR_CODES.scoreFileLoadFailed
+        const loadedScore =
+          fileFormat === 'mscz'
+            ? await convertMsczToMusicXml(binary)
+            : await loadMusicXmlFile(fileFormat, binary)
+        const { musicXml, musicMxl } = loadedScore
 
         // 結果を一括で格納
         setConvertedScore({
@@ -189,17 +232,23 @@ export const FileUploader = () => {
             })
             await refreshHistory()
           } catch (historySaveError) {
-            logger.error('履歴保存エラー:', historySaveError)
-            setStorageWarning(
-              '楽譜は開けましたが、この端末に履歴を保存できませんでした。'
+            const storageError = createAppError(
+              APP_ERROR_CODES.historySaveFailed,
+              '楽譜は開けましたが、この端末に履歴を保存できませんでした。',
+              { context: '履歴の保存', cause: historySaveError }
             )
+            logger.appError(storageError, historySaveError)
+            setStorageWarning(storageError)
           }
         }
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : '不明なエラーが発生しました'
-        logger.error('ファイル処理エラー:', message)
-        setError(message)
+        const uploadError = createAppError(
+          failureCode,
+          getErrorMessage(err, '不明なエラーが発生しました'),
+          { context: 'ファイルの読み込み・変換', cause: err }
+        )
+        logger.appError(uploadError, err)
+        setError(uploadError)
         setLoading(false)
       }
     },
@@ -220,7 +269,7 @@ export const FileUploader = () => {
           await deleteCachedScore(item.id)
           await refreshHistory()
           throw new Error(
-            'この履歴は現在のバージョンでは開けません。MSCZファイルを再度選択してください。'
+            'この履歴は現在のバージョンでは開けません。元の楽譜ファイルを再度選択してください。'
           )
         }
 
@@ -237,7 +286,7 @@ export const FileUploader = () => {
           await deleteCachedScore(item.id)
           await refreshHistory()
           throw new Error(
-            '履歴データを読み込めません。MSCZファイルを再度選択してください。'
+            '履歴データを読み込めません。元の楽譜ファイルを再度選択してください。'
           )
         }
 
@@ -260,15 +309,22 @@ export const FileUploader = () => {
           await touchCachedScore(item.id)
           await refreshHistory()
         } catch (touchError) {
-          logger.error('履歴更新エラー:', touchError)
-          setStorageWarning(
-            '楽譜は開けましたが、履歴の最終利用日時を更新できませんでした。'
+          const storageError = createAppError(
+            APP_ERROR_CODES.historyUpdateFailed,
+            '楽譜は開けましたが、履歴の最終利用日時を更新できませんでした。',
+            { context: '履歴の最終利用日時の更新', cause: touchError }
           )
+          logger.appError(storageError, touchError)
+          setStorageWarning(storageError)
         }
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : '履歴を読み込めませんでした'
-        setHistoryError(message)
+        const historyRestoreError = createAppError(
+          APP_ERROR_CODES.historyRestoreFailed,
+          getErrorMessage(err, '履歴を読み込めませんでした'),
+          { context: '履歴からの楽譜復元', cause: err }
+        )
+        logger.appError(historyRestoreError, err)
+        setHistoryError(historyRestoreError)
         setLoading(false)
       } finally {
         setRestoringId(null)
@@ -289,9 +345,13 @@ export const FileUploader = () => {
         await deleteCachedScore(item.id)
         await refreshHistory()
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : '履歴を削除できませんでした'
-        setHistoryError(message)
+        const historyDeleteError = createAppError(
+          APP_ERROR_CODES.historyDeleteFailed,
+          getErrorMessage(err, '履歴を削除できませんでした'),
+          { context: '履歴の削除', cause: err }
+        )
+        logger.appError(historyDeleteError, err)
+        setHistoryError(historyDeleteError)
       } finally {
         setDeletingId(null)
       }
@@ -361,10 +421,13 @@ export const FileUploader = () => {
 
       await processFile(demoFile, false)
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : '不明なエラーが発生しました'
-      logger.error('demo.mscz 処理エラー:', message)
-      setError(message)
+      const demoError = createAppError(
+        APP_ERROR_CODES.demoFetchFailed,
+        getErrorMessage(err, '不明なエラーが発生しました'),
+        { context: 'デモ楽譜の取得・読み込み', cause: err }
+      )
+      logger.appError(demoError, err)
+      setError(demoError)
     }
   }, [processFile, setError])
 
@@ -391,7 +454,7 @@ export const FileUploader = () => {
               楽譜を開いて、練習しよう
             </h1>
             <p className="mt-3 text-[15px] leading-6 text-slate-500">
-              MuseScoreファイルを端末内で表示・再生できます
+              楽譜ファイルを端末内で表示・再生できます
             </p>
           </div>
 
@@ -413,7 +476,7 @@ export const FileUploader = () => {
             <input
               ref={fileInputRef}
               type="file"
-              accept=".mscz"
+              accept={isIOSDevice() ? undefined : '.mscz,.mxl,.musicxml'}
               onChange={handleFileInput}
               disabled={isLoading}
               className="hidden"
@@ -438,15 +501,18 @@ export const FileUploader = () => {
                 )}
                 {isLoading ? '楽譜を読み込み中' : '楽譜をアップロード'}
               </button>
-              {uploadErrorContent && (
+              {uploadErrorContent && error && (
                 <Alert variant="error">
                   <AlertTitle>{uploadErrorContent.title}</AlertTitle>
                   <AlertDescription>
                     {uploadErrorContent.description}
                   </AlertDescription>
+                  <ErrorDetails error={error} />
                 </Alert>
               )}
-              <p className="text-sm text-slate-500">対応形式 .mscz</p>
+              <p className="text-sm text-slate-500">
+                対応形式 .mscz / .mxl / .musicxml
+              </p>
               <p className="flex items-center justify-center gap-2 text-xs text-slate-500">
                 <Icon name="lock" size="small" />
                 ファイルは外部に送信されません
@@ -491,7 +557,8 @@ export const FileUploader = () => {
             ) : historyError ? (
               <Alert variant="error">
                 <AlertTitle>履歴を読み込めませんでした</AlertTitle>
-                <AlertDescription>{historyError}</AlertDescription>
+                <AlertDescription>{historyError.message}</AlertDescription>
+                <ErrorDetails error={historyError} />
               </Alert>
             ) : history.length === 0 ? (
               <p className="rounded-xl border border-slate-100 bg-white px-4 py-4 text-sm text-slate-400">
@@ -541,7 +608,8 @@ export const FileUploader = () => {
       {storageWarning && (
         <Alert variant="info">
           <AlertTitle>履歴を保存できませんでした</AlertTitle>
-          <AlertDescription>{storageWarning}</AlertDescription>
+          <AlertDescription>{storageWarning.message}</AlertDescription>
+          <ErrorDetails error={storageWarning} />
         </Alert>
       )}
 

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock'
 import { Icon } from './ui/Icon'
 
 interface BeforeInstallPromptEvent extends Event {
@@ -23,6 +24,8 @@ export const PwaInstallDialog = ({
   const [installPrompt, setInstallPrompt] =
     useState<BeforeInstallPromptEvent | null>(null)
   const [isInstalled, setIsInstalled] = useState(isStandalone)
+
+  useBodyScrollLock(isOpen)
 
   useEffect(() => {
     const handleBeforeInstallPrompt = (event: Event) => {
@@ -56,7 +59,7 @@ export const PwaInstallDialog = ({
 
   return (
     <div
-      className="fixed inset-0 z-110 grid place-items-center overflow-y-auto bg-slate-950/40 p-5"
+      className="fixed inset-0 z-110 grid place-items-center overflow-y-auto overscroll-contain bg-slate-950/40 p-5"
       role="presentation"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose()

@@ -2,6 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import type { OpenSheetMusicDisplay } from 'opensheetmusicdisplay'
 
+import {
+  APP_ERROR_CODES,
+  type AppErrorInfo,
+  createAppError,
+} from '../lib/appError'
 import { logger } from '../lib/logger'
 import { isOsmdGlissandoLayoutError } from '../lib/osmdCompatibility'
 import { waitFrame } from '../lib/waitFrame'
@@ -15,7 +20,7 @@ export const useOSMD = (
   zoom = DEFAULT_SCORE_ZOOM
 ) => {
   const containerRef = useRef<HTMLDivElement | null>(null)
-  const [renderError, setRenderError] = useState<string | null>(null)
+  const [renderError, setRenderError] = useState<AppErrorInfo | null>(null)
   const [isRendering, setIsRendering] = useState(false)
   const [renderRevision, setRenderRevision] = useState(0)
   const osmdRef = useRef<OpenSheetMusicDisplay | null>(null)
@@ -194,12 +199,17 @@ export const useOSMD = (
         setIsRendering(false)
       } catch (err) {
         if (!isCancelled) {
-          logger.error('OSMD Render Error:', err)
+          const scoreRenderError = createAppError(
+            APP_ERROR_CODES.scoreRenderFailed,
+            '楽譜の描画中にエラーが発生しました',
+            { context: '楽譜の描画', cause: err }
+          )
+          logger.appError(scoreRenderError, err)
           isLoadedRef.current = false
           osmdRef.current?.clear()
           osmdRef.current = null
           container.innerHTML = ''
-          setRenderError('楽譜の描画中にエラーが発生しました')
+          setRenderError(scoreRenderError)
           setIsRendering(false)
         }
       }
