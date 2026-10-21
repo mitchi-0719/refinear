@@ -137,7 +137,7 @@ documents: []
 	- ユーザーがアップロードした`.mscz`をブラウザ上でWASMを使って解読し、MusicXMLデータを抽出 
 - **描画:** OSMD
 	- 抽出されたMusicXMLをスマホ幅に合わせてレスポンシブにSVG描画 。
-- **再生・操作:** Tone.js / osmd-audio-player
+- **再生・操作:** Tone.js
 	- 楽譜のMIDI再生、シーク、ミキサー（ミュート/音量調整）、タップ発音 
 - **バックエンド:**
 	- Storage: 共有用に変換済みのMusicXML（または元の`.mscz`）を保存 

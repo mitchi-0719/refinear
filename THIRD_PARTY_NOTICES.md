@@ -10,7 +10,6 @@ project for its complete copyright and license notices.
   License version 3
 - [OpenSheetMusicDisplay](https://github.com/opensheetmusicdisplay/opensheetmusicdisplay),
   BSD 3-Clause License
-- [osmd-audio-player](https://github.com/jimutt/osmd-audio-player), MIT License
 - [Tone.js](https://github.com/Tonejs/Tone.js), MIT License
 - [JSZip](https://github.com/Stuk/jszip), MIT License
 - [React](https://github.com/facebook/react), MIT License

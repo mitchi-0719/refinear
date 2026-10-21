@@ -20,7 +20,7 @@
    - `webmscore` は一部のMSCZに対して例外を投げず空のMusicXMLを返すことがあるため、パート数・小節数を検証してから後続処理へ渡す。詳細は [MSCZ変換互換性インシデントレポート](./MSCZ_COMPATIBILITY_INCIDENT_2026-08-07.md) を参照する。
 4. **描画 (`OSMD`)**
    - 抽出したMusicXMLを `OpenSheetMusicDisplay (OSMD)` に渡し、SVGとしてブラウザ上にレスポンシブ描画する。
-5. **オーディオエンジンの初期化 (`Tone.js` / `osmd-audio-player`)**
+5. **オーディオエンジンの初期化 (`Tone.js`)**
    - 抽出した楽譜データをもとにオーディオエンジンを初期化し、各パートの音源（GainNodeなど）を準備する。
 
 ## 3. 状態管理設計 (Zustand)
