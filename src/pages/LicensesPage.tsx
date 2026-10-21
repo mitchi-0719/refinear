@@ -105,12 +105,6 @@ export const LicensesPage = () => (
         — BSD 3-Clause License
       </li>
       <li>
-        <ExternalLink href="https://github.com/jimutt/osmd-audio-player">
-          osmd-audio-player
-        </ExternalLink>{' '}
-        — MIT License
-      </li>
-      <li>
         <ExternalLink href="https://github.com/Tonejs/Tone.js">
           Tone.js
         </ExternalLink>{' '}

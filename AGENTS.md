@@ -13,7 +13,7 @@
 Refinearは、`.mscz`ファイルの解析、楽譜表示、再生をモバイルブラウザ内で完結させる音取り特化のWebアプリケーションである。
 
 - ユーザーの楽譜をサーバーへ送らず、`webmscore`のWASMを使ってブラウザ内で解析する。
-- OSMDで楽譜を描画し、Tone.jsと`osmd-audio-player`で再生する。
+- OSMDで楽譜を描画し、Tone.jsで再生する。
 - 音符タップ、テンポ変更、パート別音量やミュートなど、反復練習に必要な操作をモバイルで使いやすく提供する。
 - PWAとオフライン利用を含め、出先でも短い待ち時間で練習を始められるようにする。
 
@@ -49,7 +49,7 @@ Refinearは、`.mscz`ファイルの解析、楽譜表示、再生をモバイ�
 - Tailwind CSS 4
 - Zustand
 - `webmscore`、OpenSheetMusicDisplay
-- Tone.js、`osmd-audio-player`
+- Tone.js
 - Cloudflare Workers Static Assets
 - ESLint、Prettier、npm
 

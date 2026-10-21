@@ -19,7 +19,7 @@ Refinear は、`.mscz`、`.mxl`、`.musicxml` の楽譜ファイルをブラウ�
 - **状態管理**: Zustand
 - **楽譜解析**: webmscore（WASM）
 - **楽譜描画**: OpenSheetMusicDisplay (OSMD)
-- **再生**: Tone.js, osmd-audio-player
+- **再生**: Tone.js
 - **スタイリング**: Tailwind CSS
 - **Lint / Format**: ESLint, Prettier
 
